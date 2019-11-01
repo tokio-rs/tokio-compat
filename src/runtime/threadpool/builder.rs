@@ -8,6 +8,9 @@ use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
 use tokio_timer_02 as timer_02;
 
+#[cfg(feature = "blocking")]
+use tokio_threadpool_01::blocking as blocking_01;
+
 use num_cpus;
 use std::io;
 use std::sync::{Arc, Barrier, Mutex, RwLock};
@@ -247,8 +250,14 @@ impl Builder {
                             let _timer = timer::set_default(&timer_handles[index]);
                             tracing_core::dispatcher::with_default(&dispatch, || {
                                 // Set the default executor for tokio 0.1 compat.
-                                executor_01::with_default(&mut compat_sender, enter, |_enter| {
-                                    work();
+                                executor_01::with_default(&mut compat_sender, enter, |enter| {
+                                    blocking_01::with_default(
+                                        &super::COMPAT_BLOCKING,
+                                        enter,
+                                        |_enter| {
+                                            work();
+                                        },
+                                    )
                                 })
                             })
                         })

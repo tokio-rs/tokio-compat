@@ -20,6 +20,9 @@ use tokio_02::net::driver;
 use tokio_02::timer::timer;
 use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
+#[cfg(feature = "blocking")]
+use tokio_threadpool_01::blocking as blocking_01;
+
 use tokio_timer_02 as timer_02;
 
 /// A thread pool runtime that can run tasks that use both `tokio` 0.1 and
@@ -38,7 +41,6 @@ pub struct Runtime {
     idle: idle::Idle,
     idle_rx: tokio_02::sync::mpsc::Receiver<()>,
 }
-
 #[derive(Debug)]
 struct Inner {
     /// Task execution pool.
@@ -61,12 +63,16 @@ struct Inner {
     /// futures that use older tokio APIs.
     compat_bg: compat::Background,
 }
-
 #[derive(Clone, Debug)]
 struct CompatSpawner<S> {
     inner: S,
     idle: idle::Idle,
 }
+
+#[cfg(feature = "blocking")]
+struct CompatBlocking;
+
+static COMPAT_BLOCKING: CompatBlocking = CompatBlocking;
 
 // ===== impl Runtime =====
 
@@ -366,10 +372,16 @@ impl Runtime {
                             timer_02::with_default(
                                 compat.timer(),
                                 &mut old_entered,
-                                |_old_entered| {
-                                    tracing_core::dispatcher::with_default(trace, || {
-                                        entered.block_on(future)
-                                    })
+                                |old_entered| {
+                                    blocking_01::with_default(
+                                        &COMPAT_BLOCKING,
+                                        old_entered,
+                                        |_old_entered| {
+                                            tracing_core::dispatcher::with_default(trace, || {
+                                                entered.block_on(future)
+                                            })
+                                        },
+                                    )
                                 },
                             )
                         },
@@ -538,6 +550,18 @@ impl Drop for Runtime {
         if let Some(inner) = self.inner.take() {
             drop(inner);
         }
+    }
+}
+
+#[cfg(feature = "blocking")]
+impl blocking_01::Blocking for CompatBlocking {
+    fn run_blocking(
+        &self,
+        f: &mut dyn FnMut(),
+    ) -> futures_01::Poll<(), blocking_01::BlockingError> {
+        Ok(futures_01::Async::Ready(
+            tokio_02::executor::thread_pool::blocking(f),
+        ))
     }
 }
 

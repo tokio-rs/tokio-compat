@@ -113,3 +113,33 @@ fn block_on_std_01_spawn() {
     // is that we're able to spawn it successfully.
     rt.block_on_std(async { tokio_01::spawn(futures_01::future::lazy(|| Ok(()))) });
 }
+
+#[test]
+#[cfg(feature = "blocking")]
+fn blocking() {
+    let ran = Arc::new(AtomicBool::new(false));
+    let ran2 = ran.clone();
+    super::run_std(async move {
+        tokio_threadpool_01::blocking(move || {
+            println!("blocking!");
+            ran.store(true, Ordering::SeqCst);
+        }).unwrap();
+    });
+    assert!(ran2.load(Ordering::SeqCst));
+}
+
+
+#[test]
+#[cfg(feature = "blocking")]
+fn blocking_in_block_on() {
+    let ran = Arc::new(AtomicBool::new(false));
+    let ran2 = ran.clone();
+    let rt = super::Runtime::new().unwrap();
+    rt.block_on_std(async move {
+        tokio_threadpool_01::blocking(move || {
+            println!("blocking!");
+            ran.store(true, Ordering::SeqCst);
+        }).unwrap();
+    });
+    assert!(ran2.load(Ordering::SeqCst));
+}

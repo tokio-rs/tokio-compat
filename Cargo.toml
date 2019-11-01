@@ -24,7 +24,7 @@ keywords = ["io", "async", "non-blocking", "futures"]
 
 
 [features]
-default = ["rt-full", "sink"]
+default = ["rt-full", "blocking", "sink"]
 # enables the compat runtimes.
 rt-current-thread = [
     "tokio-timer-02",
@@ -41,6 +41,11 @@ rt-full = [
     "tokio-02/rt-full",
     "rt-current-thread",
 ]
+blocking = [
+    "rt-full",
+    "tokio-02/blocking",
+    "tokio-threadpool-01"
+]
 sink = ["futures-util/sink"]
 
 [dependencies]
@@ -53,6 +58,8 @@ tokio-02 = { package = "tokio", git = "https://github.com/tokio-rs/tokio", rev =
 tokio-timer-02 = { package = "tokio-timer", version = "0.2", optional = true}
 tokio-reactor-01 = { package = "tokio-reactor", version = "0.1", optional = true }
 tokio-executor-01 = { package = "tokio-executor", version = "0.1", optional = true }
+tokio-threadpool-01 = { package = "tokio-threadpool", version = "0.1", optional = true, git = "https://github.com/tokio-rs/tokio", branch = "eliza/blocking-compat-01" }
+
 num_cpus =  { version = "1", optional = true }
 tracing-core = { version = "0.1", optional = true }
 
