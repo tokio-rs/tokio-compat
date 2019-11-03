@@ -1,4 +1,5 @@
-use tokio_02::executor::{thread_pool::Spawner, Executor};
+use tokio_02::executor::Executor;
+use tokio_02::runtime::Spawner;
 use tokio_executor_01::{self as executor_01, Executor as Executor01};
 
 use futures_01::future::Future as Future01;
