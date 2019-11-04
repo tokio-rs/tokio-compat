@@ -272,6 +272,9 @@ impl Builder {
 
         // Set the tokio 0.1 executor to be used by the worker threads.
         *compat_sender = Some(runtime.spawner());
+        // Releasing the write lock allows the workers to unblock and access the
+        // sender.
+        drop(compat_sender);
 
         Ok(runtime)
     }
