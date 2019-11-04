@@ -218,8 +218,11 @@ impl Builder {
         // sender is cloned, and the lock doesn't need to be acquired to spawn a
         // future. Since we only use it when creating the pool, there shouldn't
         // be much of a performance impact.
-        let compat_sender = Arc::new((RwLock::new(None), Barrier::new(self.core_threads + 1)));
-        let compat_sender2 = compat_sender.clone();
+        let sender_lock = Arc::new(RwLock::new(None));
+        let mut compat_sender = sender_lock
+            .write()
+            .expect("lock has not been accessed, it cannot have been poisoned");
+        let compat_sender2 = sender_lock.clone();
 
         let pool = self
             .threadpool_builder
@@ -227,10 +230,8 @@ impl Builder {
                 let mut enter = executor_01::enter().unwrap();
                 // We need the threadpool's sender to set up the default tokio
                 // 0.1 executor.
-                let (compat_sender, sender_ready) = &*compat_sender2;
-                // Wait for the sender to be set.
-                sender_ready.wait();
-                let mut compat_sender = compat_sender
+                let sender_lock = compat_sender2.clone();
+                let mut compat_sender = sender_lock
                     .read()
                     .unwrap()
                     .clone()
@@ -270,9 +271,7 @@ impl Builder {
         };
 
         // Set the tokio 0.1 executor to be used by the worker threads.
-        let (compat_sender, sender_ready) = &*compat_sender;
-        *compat_sender.write().unwrap() = Some(runtime.spawner());
-        sender_ready.wait();
+        *compat_sender = Some(runtime.spawner());
 
         Ok(runtime)
     }
