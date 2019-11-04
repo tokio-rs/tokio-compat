@@ -119,12 +119,9 @@ fn tokio_02_blocking_shutdown() {
     let ran = Arc::new(AtomicBool::new(false));
     let ran2 = ran.clone();
     super::run_std(async move {
-        println!("in future, before blocking");
         tokio_02::executor::thread_pool::blocking(move || {
-            println!("in blocking");
             ran.store(true, Ordering::SeqCst);
         });
-        println!("blocking done");
     });
     assert!(ran2.load(Ordering::SeqCst));
 }
