@@ -24,7 +24,9 @@ keywords = ["io", "async", "non-blocking", "futures"]
 
 
 [features]
-default = ["rt-full", "sink"]
+default = ["rt-full", "sink", "futures-io"]
+io = ["tokio-02/io", "pin-project"]
+futures-io = ["io", "futures-io-preview"]
 # enables the compat runtimes.
 rt-current-thread = [
     "tokio-timer-02",
@@ -48,6 +50,10 @@ futures-01 = { package = "futures", version = "0.1" }
 futures-03-core = { package = "futures-core-preview", version = "0.3.0-alpha.19" }
 futures-util = { package = "futures-util-preview", version = "0.3.0-alpha.19", default-features = false, features = ["compat"] }
 tokio-02 = { package = "tokio", git = "https://github.com/tokio-rs/tokio", rev ="e699d4653", default_features = false }
+
+# io
+futures-io-preview = { version = "0.3.0-alpha.19", optional = true }
+pin-project = { version = "0.4", optional = true }
 
 # runtime-only
 tokio-timer-02 = { package = "tokio-timer", version = "0.2", optional = true}
