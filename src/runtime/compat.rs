@@ -3,8 +3,7 @@ use tokio_reactor_01 as reactor_01;
 use tokio_timer_02::{clock as clock_02, timer as timer_02};
 
 use futures_01::sync::oneshot;
-use std::cell::RefCell;
-use std::{io, thread};
+use std::{cell::RefCell, io, thread};
 
 #[derive(Debug)]
 pub(super) struct Background {
@@ -51,11 +50,11 @@ pub(super) fn unset_guards() {
 }
 
 impl Background {
-    pub(super) fn spawn() -> io::Result<Self> {
+    pub(super) fn spawn(clock: &clock_02::Clock) -> io::Result<Self> {
         let reactor = reactor_01::Reactor::new()?;
         let reactor_handle = reactor.handle();
 
-        let timer = timer_02::Timer::new(reactor);
+        let timer = timer_02::Timer::new_with_now(reactor, clock.clone());
         let timer_handle = timer.handle();
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -128,11 +127,5 @@ impl Drop for Background {
 //     #[inline]
 //     fn unpark(&self) {
 //         self.0.unpark()
-//     }
-// }
-
-// impl clock_02::Now for Now<tokio_02::timer::clock::Clock> {
-//     fn now(&self) -> Instant {
-//         self.0.now()
 //     }
 // }

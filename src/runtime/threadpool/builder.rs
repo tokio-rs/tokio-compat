@@ -7,7 +7,7 @@ use super::{
 
 // use tokio_02::net::driver::{self, Reactor};
 use tokio_02::runtime;
-// use tokio_02::timer::clock::{self, Clock};
+use tokio_timer_02::clock as clock_02;
 // use tokio_02::timer::timer::{self, Timer};
 
 // #[cfg(feature = "blocking")]
@@ -36,7 +36,7 @@ use std::sync::{Arc, RwLock};
 /// ```
 ///
 /// use tokio_compat::runtime::Builder;
-/// use tokio_02::timer::clock::Clock;
+/// use tokio_timer_02::clock::Clock;
 ///
 /// fn main() {
 ///     // build Runtime
@@ -53,8 +53,8 @@ use std::sync::{Arc, RwLock};
 /// ```
 #[derive(Debug)]
 pub struct Builder {
-    // num_threads: usize,
     inner: runtime::Builder,
+    clock: clock_02::Clock,
 }
 
 impl Builder {
@@ -63,19 +63,17 @@ impl Builder {
     ///
     /// Configuration methods can be chained on the return value.
     pub fn new() -> Builder {
-        // let num_threads = num_cpus::get().max(1);
         Builder {
-            // num_threads,
+            clock: clock_02::Clock::system(),
             inner: runtime::Builder::new(),
         }
     }
 
-    // /// Set the `Clock` instance that will be used by the runtime.
-    // pub fn clock(&mut self, clock: Clock) -> &mut Self {
-    //     self.inner.clock(clock.clone());
-    //     self.clock = clock;
-    //     self
-    // }
+    /// Set the `Clock` instance that will be used by the runtime's legacy timer.
+    pub fn clock(&mut self, clock: clock_02::Clock) -> &mut Self {
+        self.clock = clock;
+        self
+    }
 
     /// Set the maximum number of worker threads for the `Runtime`'s thread pool.
     ///
@@ -164,7 +162,7 @@ impl Builder {
     /// # }
     /// ```
     pub fn build(&mut self) -> io::Result<Runtime> {
-        let compat_bg = compat::Background::spawn()?;
+        let compat_bg = compat::Background::spawn(&self.clock)?;
         let compat_timer = compat_bg.timer().clone();
         let compat_reactor = compat_bg.reactor().clone();
         let compat_sender: Arc<RwLock<Option<super::CompatSpawner<tokio_02::runtime::Handle>>>> =
