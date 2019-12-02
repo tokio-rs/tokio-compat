@@ -1,4 +1,3 @@
-// mod background;
 mod builder;
 mod idle;
 mod task_executor;
@@ -9,19 +8,13 @@ pub use builder::Builder;
 pub use task_executor::TaskExecutor;
 
 use super::compat;
-// use background::Background;
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
 use std::{future::Future, io};
-// use tokio_02::executor::enter;
-// use tokio_02::net::driver;
 use tokio_02::runtime::{self, Handle};
-// use tokio_02::timer::timer;
 use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
-// #[cfg(feature = "blocking")]
-// use tokio_threadpool_01::blocking as blocking_01;
 
 use tokio_timer_02 as timer_02;
 
@@ -58,12 +51,6 @@ struct CompatSpawner<S> {
     inner: S,
     idle: idle::Idle,
 }
-
-#[cfg(feature = "blocking")]
-struct CompatBlocking;
-
-#[cfg(feature = "blocking")]
-static COMPAT_BLOCKING: CompatBlocking = CompatBlocking;
 
 // ===== impl Runtime =====
 
@@ -508,18 +495,6 @@ impl Drop for Runtime {
         }
     }
 }
-
-// #[cfg(feature = "blocking")]
-// impl blocking_01::Blocking for CompatBlocking {
-//     fn run_blocking(
-//         &self,
-//         f: &mut dyn FnMut(),
-//     ) -> futures_01::Poll<(), blocking_01::BlockingError> {
-//         Ok(futures_01::Async::Ready(
-//             tokio_02::executor::thread_pool::blocking(f),
-//         ))
-//     }
-// }
 
 #[cfg(test)]
 mod tests;

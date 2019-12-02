@@ -1,19 +1,11 @@
-use super::{
-    // background,
-    compat,
-    Inner,
-    Runtime,
-};
+use super::{compat, Inner, Runtime};
 
-// use tokio_02::net::driver::{self, Reactor};
+use std::{
+    io,
+    sync::{Arc, RwLock},
+};
 use tokio_02::runtime;
 use tokio_timer_02::clock as clock_02;
-// use tokio_02::timer::timer::{self, Timer};
-
-// #[cfg(feature = "blocking")]
-// use tokio_threadpool_01::blocking as blocking_01;
-use std::io;
-use std::sync::{Arc, RwLock};
 
 /// Builds a compatibility runtime with custom configuration values.
 ///
