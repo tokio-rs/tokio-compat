@@ -75,8 +75,7 @@
 //!     println!("10 ms have elapsed");
 //!
 //!     // Wait for a `tokio` 0.2 `Delay`...
-//!     let when = Instant::now() + Duration::from_millis(20);
-//!     tokio_02::timer::delay(when).await;
+//!     tokio_02::time::delay_for(Duration::from_millis(20)).await;
 //!     println!("20 ms have elapsed");
 //! });
 //! ```
