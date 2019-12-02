@@ -1,5 +1,6 @@
-use tokio_02::executor::Executor;
-use tokio_02::runtime::Spawner;
+// use tokio_02::executor::Executor;
+use tokio_02::runtime::Handle;
+use tokio_02::task::JoinHandle;
 use tokio_executor_01::{self as executor_01, Executor as Executor01};
 
 use futures_01::future::Future as Future01;
@@ -15,7 +16,7 @@ use std::pin::Pin;
 /// For more details, see the [module level](index.html) documentation.
 #[derive(Debug, Clone)]
 pub struct TaskExecutor {
-    pub(super) inner: super::CompatSpawner<Spawner>,
+    pub(super) inner: super::CompatSpawner<Handle>,
 }
 
 impl TaskExecutor {
@@ -50,11 +51,13 @@ impl TaskExecutor {
     ///
     /// This function panics if the spawn fails. Failure occurs if the executor
     /// is currently at capacity and is unable to spawn a new future.
-    pub fn spawn<F>(&self, future: F)
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<Result<F::Item, F::Error>>
     where
-        F: Future01<Item = (), Error = ()> + Send + 'static,
+        F: Future01 + Send + 'static,
+        F::Item: Send + 'static,
+        F::Error: Send + 'static,
     {
-        self.spawn_std(Box::pin(future.compat().map(|_| ())));
+        self.spawn_std(Box::pin(future.compat()))
     }
 
     /// Spawn a `std::future` future onto the Tokio runtime.
@@ -88,30 +91,13 @@ impl TaskExecutor {
     ///
     /// This function panics if the spawn fails. Failure occurs if the executor
     /// is currently at capacity and is unable to spawn a new future.
-    pub fn spawn_std<F>(&self, future: F)
+    pub fn spawn_std<F>(&self, future: F) -> JoinHandle<F::Output>
     where
-        F: Future<Output = ()> + Send + 'static,
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
     {
         let idle = self.inner.idle.reserve();
-        self.inner.inner.spawn(idle.with(future));
-    }
-}
-
-impl Executor for TaskExecutor {
-    fn spawn(
-        &mut self,
-        future: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> Result<(), tokio_02::executor::SpawnError> {
-        Executor::spawn(&mut self.inner, future)
-    }
-}
-
-impl<T> tokio_02::executor::TypedExecutor<T> for TaskExecutor
-where
-    T: Future<Output = ()> + Send + 'static,
-{
-    fn spawn(&mut self, future: T) -> Result<(), tokio_02::executor::SpawnError> {
-        Executor::spawn(&mut self.inner, Box::pin(future))
+        self.inner.inner.spawn(idle.with(future))
     }
 }
 

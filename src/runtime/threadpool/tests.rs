@@ -79,7 +79,7 @@ fn tokio_01_timers_work() {
 
 #[test]
 fn block_on_01_timer() {
-    let rt = super::Runtime::new().unwrap();
+    let mut rt = super::Runtime::new().unwrap();
     let when = Instant::now() + Duration::from_millis(10);
     rt.block_on(tokio_01::timer::Delay::new(when)).unwrap();
     assert!(Instant::now() >= when);
@@ -87,7 +87,7 @@ fn block_on_01_timer() {
 
 #[test]
 fn block_on_std_01_timer() {
-    let rt = super::Runtime::new().unwrap();
+    let mut rt = super::Runtime::new().unwrap();
     let when = Instant::now() + Duration::from_millis(10);
     rt.block_on_std(async move {
         tokio_01::timer::Delay::new(when).compat().await.unwrap();
@@ -97,7 +97,7 @@ fn block_on_std_01_timer() {
 
 #[test]
 fn block_on_01_spawn() {
-    let rt = super::Runtime::new().unwrap();
+    let mut rt = super::Runtime::new().unwrap();
     // other tests assert that spawned 0.1 tasks actually *run*, all we care
     // is that we're able to spawn it successfully.
     rt.block_on(futures_01::future::lazy(|| {
@@ -108,22 +108,22 @@ fn block_on_01_spawn() {
 
 #[test]
 fn block_on_std_01_spawn() {
-    let rt = super::Runtime::new().unwrap();
+    let mut rt = super::Runtime::new().unwrap();
     // other tests assert that spawned 0.1 tasks actually *run*, all we care
     // is that we're able to spawn it successfully.
     rt.block_on_std(async { tokio_01::spawn(futures_01::future::lazy(|| Ok(()))) });
 }
 
 #[test]
-fn tokio_02_blocking_works() {
+fn tokio_02_spawn_blocking_works() {
     let ran = Arc::new(AtomicBool::new(false));
     let ran2 = ran.clone();
     super::run_std(async move {
         println!("in future, before blocking");
-        tokio_02::executor::thread_pool::blocking(move || {
+        tokio_02::task::spawn_blocking(move || {
             println!("in blocking");
             ran.store(true, Ordering::SeqCst);
-        });
+        }).await;
         println!("blocking done");
     });
     assert!(ran2.load(Ordering::SeqCst));
@@ -150,7 +150,7 @@ fn tokio_02_blocking_works() {
 // fn blocking_in_block_on() {
 //     let ran = Arc::new(AtomicBool::new(false));
 //     let ran2 = ran.clone();
-//     let rt = super::Runtime::new().unwrap();
+//     let mut rt = super::Runtime::new().unwrap();
 //     rt.block_on_std(async move {
 //         tokio_threadpool_01::blocking(move || {
 //             println!("blocking!");
