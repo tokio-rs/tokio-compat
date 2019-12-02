@@ -51,13 +51,11 @@ impl TaskExecutor {
     ///
     /// This function panics if the spawn fails. Failure occurs if the executor
     /// is currently at capacity and is unable to spawn a new future.
-    pub fn spawn<F>(&self, future: F) -> JoinHandle<Result<F::Item, F::Error>>
+    pub fn spawn<F>(&self, future: F)
     where
-        F: Future01 + Send + 'static,
-        F::Item: Send + 'static,
-        F::Error: Send + 'static,
+        F: Future01<Item = (), Error = ()> + Send + 'static,
     {
-        self.spawn_std(Box::pin(future.compat()))
+        self.spawn_std(Box::pin(future.compat().map(|_| ())))
     }
 
     /// Spawn a `std::future` future onto the Tokio runtime.
@@ -91,7 +89,88 @@ impl TaskExecutor {
     ///
     /// This function panics if the spawn fails. Failure occurs if the executor
     /// is currently at capacity and is unable to spawn a new future.
-    pub fn spawn_std<F>(&self, future: F) -> JoinHandle<F::Output>
+    pub fn spawn_std<F>(&self, future: F)
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let idle = self.inner.idle.reserve();
+        let _ = self.inner.inner.spawn(idle.with(future));
+    }
+
+    /// Spawn a `futures` 0.1 future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `futures` 0.1 future onto the runtime
+    /// executor.spawn(futures_01::future::lazy(|| {
+    ///     println!("now running on a worker thread");
+    ///     Ok(())
+    /// }));
+    /// # }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the spawn fails. Failure occurs if the executor
+    /// is currently at capacity and is unable to spawn a new future.
+    pub fn spawn_handle<F>(&self, future: F) -> JoinHandle<Result<F::Item, F::Error>>
+    where
+        F: Future01 + Send + 'static,
+        F::Item: Send + 'static,
+        F::Error: Send + 'static,
+    {
+        self.spawn_handle_std(Box::pin(future.compat()))
+    }
+
+    /// Spawn a `std::future` future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    ///
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `std::future` future onto the runtime
+    /// executor.spawn_std(async {
+    ///     println!("now running on a worker thread");
+    /// });
+    /// # }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the spawn fails. Failure occurs if the executor
+    /// is currently at capacity and is unable to spawn a new future.
+    pub fn spawn_handle_std<F>(&self, future: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
