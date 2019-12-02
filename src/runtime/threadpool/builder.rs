@@ -9,17 +9,11 @@ use super::{
 use tokio_02::runtime;
 // use tokio_02::timer::clock::{self, Clock};
 // use tokio_02::timer::timer::{self, Timer};
-use tokio_executor_01 as executor_01;
-use tokio_reactor_01 as reactor_01;
-use tokio_timer_02 as timer_02;
 
 // #[cfg(feature = "blocking")]
 // use tokio_threadpool_01::blocking as blocking_01;
-
-use num_cpus;
-use std::cell::RefCell;
 use std::io;
-use std::sync::{Arc, Barrier, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 /// Builds a compatibility runtime with custom configuration values.
 ///
@@ -173,10 +167,10 @@ impl Builder {
         let compat_bg = compat::Background::spawn()?;
         let compat_timer = compat_bg.timer().clone();
         let compat_reactor = compat_bg.reactor().clone();
-        let compat_sender: Arc<Mutex<Option<super::CompatSpawner<tokio_02::runtime::Handle>>>> =
-            Arc::new(Mutex::new(None));
+        let compat_sender: Arc<RwLock<Option<super::CompatSpawner<tokio_02::runtime::Handle>>>> =
+            Arc::new(RwLock::new(None));
         let compat_sender2 = compat_sender.clone();
-        let mut lock = compat_sender.lock().unwrap();
+        let mut lock = compat_sender.write().unwrap();
 
         let runtime = self
             .inner
@@ -185,7 +179,7 @@ impl Builder {
             .on_thread_start(move || {
                 // We need the threadpool's sender to set up the default tokio
                 // 0.1 executor.
-                let mut lock = compat_sender2.lock().unwrap();
+                let lock = compat_sender2.read().unwrap();
                 let compat_sender = lock
                     .as_ref()
                     .expect("compat executor needs to be set before the pool is run!")
@@ -207,7 +201,6 @@ impl Builder {
         let runtime = Runtime {
             inner: Some(Inner { runtime, compat_bg }),
             idle_rx,
-            compat_sender,
             idle,
         };
 

@@ -123,7 +123,7 @@ fn tokio_02_spawn_blocking_works() {
         tokio_02::task::spawn_blocking(move || {
             println!("in blocking");
             ran.store(true, Ordering::SeqCst);
-        }).await;
+        }).await.expect("blocking task panicked!");
         println!("blocking done");
     });
     assert!(ran2.load(Ordering::SeqCst));

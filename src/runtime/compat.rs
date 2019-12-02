@@ -4,10 +4,7 @@ use tokio_timer_02::{clock as clock_02, timer as timer_02};
 
 use futures_01::sync::oneshot;
 use std::cell::RefCell;
-use std::{
-    io, thread,
-    time::{Duration, Instant},
-};
+use std::{io, thread};
 
 #[derive(Debug)]
 pub(super) struct Background {
@@ -48,7 +45,7 @@ pub(super) fn set_guards(
 }
 
 pub(super) fn unset_guards() {
-    COMPAT_GUARDS.try_with(move |current| {
+    let _ = COMPAT_GUARDS.try_with(move |current| {
         drop(current.borrow_mut().take());
     });
 }

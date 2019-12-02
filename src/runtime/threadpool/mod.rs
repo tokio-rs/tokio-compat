@@ -13,8 +13,7 @@ use super::compat;
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
-use std::sync::{Arc, Barrier, Mutex};
-use std::{future::Future, io, pin::Pin};
+use std::{future::Future, io};
 // use tokio_02::executor::enter;
 // use tokio_02::net::driver;
 use tokio_02::runtime::{self, Handle};
@@ -39,7 +38,6 @@ use tokio_timer_02 as timer_02;
 #[derive(Debug)]
 pub struct Runtime {
     inner: Option<Inner>,
-    compat_sender: Arc<Mutex<Option<CompatSpawner<Handle>>>>,
     idle: idle::Idle,
     idle_rx: tokio_02::sync::mpsc::Receiver<()>,
 }

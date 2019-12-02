@@ -6,7 +6,6 @@ use tokio_executor_01::{self as executor_01, Executor as Executor01};
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
 use std::future::Future;
-use std::pin::Pin;
 
 /// Executes futures on the runtime
 ///
