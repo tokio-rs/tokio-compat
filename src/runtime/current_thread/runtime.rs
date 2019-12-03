@@ -34,7 +34,10 @@ pub struct Runtime {
 
 /// Handle to spawn a future on the corresponding `CurrentThread` runtime instance
 #[derive(Debug, Clone)]
-pub struct Handle(Handle02);
+pub struct Handle {
+    inner: Handle02,
+    idle: idle::Idle,
+}
 
 impl Handle {
     /// Spawn a `futures` 0.1 future onto the `CurrentThread` runtime instance
@@ -48,7 +51,8 @@ impl Handle {
     where
         F: Future01<Item = (), Error = ()> + Send + 'static,
     {
-        let _ = self.0.spawn(future.compat().map(|_| ()));
+        let future = future.compat().map(|_| ());
+        self.spawn_std(future);
         Ok(())
     }
 
@@ -63,7 +67,7 @@ impl Handle {
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        self.0.spawn(future);
+        self.0.spawn(self.idle.reserve().with(future));
     }
 
     /// Provides a best effort **hint** to whether or not `spawn` will succeed.
@@ -120,7 +124,9 @@ impl Runtime {
     /// Different to the runtime itself, the handle can be sent to different
     /// threads.
     pub fn handle(&self) -> Handle {
-        Handle(self.inner.handle().clone())
+        let inner = self.inner.handle().clone();
+        let idle = self.idle.clone();
+        Handle { inner, idle }
     }
 
     /// Spawn a `futures` 0.1 future onto the single-threaded Tokio runtime.
@@ -272,9 +278,5 @@ impl Runtime {
             local.block_on(inner, idle_rx.recv())
         });
         Ok(())
-    }
-
-    fn spawner(&self) -> compat::CompatSpawner<&Handle02> {
-        compat::CompatSpawner::new(self.inner.handle(), &self.idle)
     }
 }
