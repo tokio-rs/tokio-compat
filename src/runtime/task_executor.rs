@@ -1,4 +1,3 @@
-// use tokio_02::executor::Executor;
 use tokio_02::runtime::Handle;
 use tokio_02::task::JoinHandle;
 use tokio_executor_01::{self as executor_01, Executor as Executor01};
@@ -15,7 +14,7 @@ use std::future::Future;
 /// For more details, see the [module level](index.html) documentation.
 #[derive(Debug, Clone)]
 pub struct TaskExecutor {
-    pub(super) inner: super::CompatSpawner<Handle>,
+    pub(super) inner: super::compat::CompatSpawner<Handle>,
 }
 
 impl TaskExecutor {

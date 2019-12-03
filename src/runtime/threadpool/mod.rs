@@ -1,13 +1,14 @@
 mod builder;
-mod idle;
-mod task_executor;
 
+#[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
+pub use super::task_executor::TaskExecutor;
 #[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
 pub use builder::Builder;
-#[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
-pub use task_executor::TaskExecutor;
 
-use super::compat;
+use super::{
+    compat::{self, CompatSpawner},
+    idle,
+};
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
@@ -44,12 +45,6 @@ struct Inner {
     /// This maintains a `tokio` 0.1 timer and reactor to support running
     /// futures that use older tokio APIs.
     compat_bg: compat::Background,
-}
-
-#[derive(Clone, Debug)]
-struct CompatSpawner<S> {
-    inner: S,
-    idle: idle::Idle,
 }
 
 // ===== impl Runtime =====
@@ -328,7 +323,6 @@ impl Runtime {
     where
         F: Future,
     {
-
         let spawner = self.spawner();
         let inner = self.inner_mut();
         let compat = &inner.compat_bg;
@@ -369,16 +363,15 @@ impl Runtime {
     /// [mod]: index.html
     pub fn shutdown_on_idle(mut self) {
         let spawner = self.spawner();
-        let Inner { compat_bg, mut runtime } =
-            self.inner.take().expect("runtime is only shut down once");
+        let Inner {
+            compat_bg,
+            mut runtime,
+        } = self.inner.take().expect("runtime is only shut down once");
         let _timer = timer_02::timer::set_default(compat_bg.timer());
         let _reactor = reactor_01::set_default(compat_bg.reactor());
         let _executor = executor_01::set_default(spawner);
         let idle = &mut self.idle_rx;
-        runtime.block_on(async {
-            idle.recv().await;
-            println!("idle recieved");
-        });
+        runtime.block_on(idle.recv());
     }
 
     /// Signals the runtime to shutdown immediately.
@@ -431,60 +424,6 @@ impl Runtime {
 
     fn inner_mut(&mut self) -> &mut Inner {
         self.inner.as_mut().unwrap()
-    }
-}
-
-impl executor_01::Executor for CompatSpawner<Handle> {
-    fn spawn(
-        &mut self,
-        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
-    ) -> Result<(), executor_01::SpawnError> {
-        let future = future.compat().map(|_| ());
-        let idle = self.idle.reserve();
-        self.inner.spawn(idle.with(future));
-        Ok(())
-    }
-}
-
-impl<T> executor_01::TypedExecutor<T> for CompatSpawner<Handle>
-where
-    T: Future01<Item = (), Error = ()> + Send + 'static,
-{
-    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
-        let idle = self.idle.reserve();
-        let future = Box::pin(idle.with(future.compat().map(|_| ())));
-        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
-        // future twice (once to spawn it using `Executor01::spawn` and a second
-        // time to pin the compat future).
-        self.inner.spawn(future);
-        Ok(())
-    }
-}
-
-impl<'a> executor_01::Executor for CompatSpawner<&'a mut Handle> {
-    fn spawn(
-        &mut self,
-        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
-    ) -> Result<(), executor_01::SpawnError> {
-        let future = future.compat().map(|_| ());
-        let idle = self.idle.reserve();
-        self.inner.spawn(idle.with(future));
-        Ok(())
-    }
-}
-
-impl<'a, T> executor_01::TypedExecutor<T> for CompatSpawner<&'a mut Handle>
-where
-    T: Future01<Item = (), Error = ()> + Send + 'static,
-{
-    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
-        let idle = self.idle.reserve();
-        let future = Box::pin(idle.with(future.compat().map(|_| ())));
-        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
-        // future twice (once to spawn it using `Executor01::spawn` and a second
-        // time to pin the compat future).
-        self.inner.spawn(future);
-        Ok(())
     }
 }
 

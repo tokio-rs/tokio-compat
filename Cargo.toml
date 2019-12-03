@@ -68,3 +68,6 @@ tracing-core = { version = "0.1", optional = true }
 
 [dev-dependencies]
 tokio-01 = { package = "tokio", version = "0.1" }
+
+[patch.crates-io]
+tokio = { git = "https://github.com/tokio-rs/tokio", branch = "eliza/non-static-local-block" }

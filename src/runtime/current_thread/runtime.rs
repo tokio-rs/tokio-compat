@@ -1,10 +1,6 @@
-use super::{compat, Builder};
+use super::{compat, idle, Builder};
 
-use tokio_02::executor::current_thread::Handle as ExecutorHandle;
-use tokio_02::executor::current_thread::{self, CurrentThread};
-use tokio_02::net::driver::{self, Reactor};
-use tokio_02::timer::clock::{self, Clock};
-use tokio_02::timer::timer::{self, Timer};
+use tokio_02::{runtime::Handle as Handle02, task::LocalSet};
 use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
 use tokio_timer_02 as timer_02;
@@ -24,10 +20,10 @@ use std::io;
 /// [mod]: index.html
 #[derive(Debug)]
 pub struct Runtime {
-    reactor_handle: driver::Handle,
-    timer_handle: timer::Handle,
-    clock: Clock,
-    executor: CurrentThread<Parker>,
+    inner: tokio_02::runtime::Runtime,
+    local: LocalSet,
+    idle: idle::Idle,
+    idle_rx: idle::Rx,
 
     /// Compatibility background thread.
     ///
@@ -36,11 +32,9 @@ pub struct Runtime {
     compat: compat::Background,
 }
 
-pub(super) type Parker = Timer<Reactor>;
-
 /// Handle to spawn a future on the corresponding `CurrentThread` runtime instance
 #[derive(Debug, Clone)]
-pub struct Handle(ExecutorHandle);
+pub struct Handle(Handle02);
 
 impl Handle {
     /// Spawn a `futures` 0.1 future onto the `CurrentThread` runtime instance
@@ -54,9 +48,8 @@ impl Handle {
     where
         F: Future01<Item = (), Error = ()> + Send + 'static,
     {
-        self.0
-            .spawn(future.compat().map(|_| ()))
-            .map_err(compat::spawn_err)
+        let _ = self.0.spawn(future.compat().map(|_| ()));
+        Ok(())
     }
 
     /// Spawn a `std::future` future onto the `CurrentThread` runtime instance
@@ -66,12 +59,13 @@ impl Handle {
     ///
     /// This function panics if the spawn fails. Failure occurs if the `CurrentThread`
     /// instance of the `Handle` does not exist anymore.
-    pub fn spawn_std<F>(&self, future: F) -> Result<(), tokio_02::executor::SpawnError>
+    pub fn spawn_std<F>(&self, future: F)
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        self.0.spawn(future)
+        self.0.spawn(future);
     }
+
     /// Provides a best effort **hint** to whether or not `spawn` will succeed.
     ///
     /// This function may return both false positives **and** false negatives.
@@ -82,49 +76,23 @@ impl Handle {
     /// This allows a caller to avoid creating the task if the call to `spawn`
     /// has a high likelihood of failing.
     pub fn status(&self) -> Result<(), executor_01::SpawnError> {
-        self.0.status().map_err(compat::spawn_err)
-    }
-}
-
-impl<T> tokio_02::executor::TypedExecutor<T> for Handle
-where
-    T: Future<Output = ()> + Send + 'static,
-{
-    fn spawn(&mut self, future: T) -> Result<(), tokio_02::executor::SpawnError> {
-        Handle::spawn_std(self, future)
-    }
-}
-
-impl<T> executor_01::TypedExecutor<T> for Handle
-where
-    T: Future01<Item = (), Error = ()> + Send + 'static,
-{
-    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
-        Handle::spawn(self, future)
+        Ok(())
     }
 }
 
 /// Error returned by the `run` function.
 #[derive(Debug)]
 pub struct RunError {
-    inner: current_thread::RunError,
+    inner: (),
 }
 
 impl fmt::Display for RunError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "{}", self.inner)
+        write!(fmt, "RunError")
     }
 }
 
-impl Error for RunError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.inner.source()
-    }
-}
-
-struct CompatExec {
-    inner: current_thread::TaskExecutor,
-}
+impl Error for RunError {}
 
 impl Runtime {
     /// Returns a new runtime initialized with default configuration values.
@@ -133,19 +101,18 @@ impl Runtime {
     }
 
     pub(super) fn new2(
-        reactor_handle: driver::Handle,
-        timer_handle: timer::Handle,
-        clock: Clock,
-        executor: CurrentThread<Parker>,
-    ) -> io::Result<Runtime> {
-        let compat = compat::Background::spawn(&clock)?;
-        Ok(Runtime {
-            reactor_handle,
-            timer_handle,
-            clock,
-            executor,
+        inner: tokio_02::runtime::Runtime,
+        idle: idle::Idle,
+        idle_rx: idle::Rx,
+        compat: compat::Background,
+    ) -> Self {
+        Self {
+            inner,
+            idle,
+            idle_rx,
             compat,
-        })
+            local: tokio_02::task::LocalSet::new(),
+        }
     }
 
     /// Get a new handle to spawn futures on the single-threaded Tokio runtime
@@ -153,7 +120,7 @@ impl Runtime {
     /// Different to the runtime itself, the handle can be sent to different
     /// threads.
     pub fn handle(&self) -> Handle {
-        Handle(self.executor.handle().clone())
+        Handle(self.inner.handle().clone())
     }
 
     /// Spawn a `futures` 0.1 future onto the single-threaded Tokio runtime.
@@ -187,8 +154,7 @@ impl Runtime {
     where
         F: Future01<Item = (), Error = ()> + 'static,
     {
-        self.executor.spawn(future.compat().map(|_| ()));
-        self
+        self.spawn_std(future.compat().map(|_| ()))
     }
 
     /// Spawn a `std::future` future onto the single-threaded Tokio runtime.
@@ -221,7 +187,7 @@ impl Runtime {
     where
         F: Future<Output = ()> + 'static,
     {
-        self.executor.spawn(future);
+        self.local.spawn_local(self.idle.reserve().with(future));
         self
     }
 
@@ -243,12 +209,9 @@ impl Runtime {
     /// complete execution by calling `block_on` or `run`.
     pub fn block_on<F>(&mut self, f: F) -> Result<F::Item, F::Error>
     where
-        F: Future01,
+        F: Future01 + 'static,
     {
-        self.enter(|executor| {
-            // Run the provided future
-            executor.block_on(f.compat())
-        })
+        self.block_on_std(f.compat())
     }
 
     /// Runs the provided `std::future` future, blocking the current thread
@@ -269,73 +232,49 @@ impl Runtime {
     /// complete execution by calling `block_on` or `run`.
     pub fn block_on_std<F>(&mut self, f: F) -> F::Output
     where
-        F: Future,
+        F: Future + 'static,
     {
-        self.enter(|executor| {
-            // Run the provided future
-            executor.block_on(f)
-        })
+        let handle = self.inner.handle().clone();
+        let Runtime {
+            ref mut local,
+            ref mut inner,
+            ref compat,
+            ref idle,
+            ..
+        } = *self;
+        let mut spawner = compat::CompatSpawner::new(handle, &idle);
+        let mut enter = executor_01::enter().unwrap();
+        // Set the default tokio 0.1 reactor to the background compat reactor.
+        let _reactor = reactor_01::set_default(compat.reactor());
+        let _timer = timer_02::timer::set_default(compat.timer());
+        executor_01::with_default(&mut spawner, &mut enter, |_enter| local.block_on(inner, f))
     }
 
     /// Run the executor to completion, blocking the thread until **all**
     /// spawned futures have completed.
     pub fn run(&mut self) -> Result<(), RunError> {
-        self.enter(|executor| executor.run())
-            .map_err(|e| RunError { inner: e })
-    }
-
-    fn enter<F, R>(&mut self, f: F) -> R
-    where
-        F: FnOnce(&mut current_thread::CurrentThread<Parker>) -> R,
-    {
+        let handle = self.inner.handle().clone();
         let Runtime {
-            ref reactor_handle,
-            ref timer_handle,
-            ref clock,
-            ref mut executor,
+            ref mut local,
+            ref mut inner,
             ref compat,
+            ref mut idle_rx,
+            ref idle,
+            ..
         } = *self;
-
+        let mut spawner = compat::CompatSpawner::new(handle, &idle);
         let mut enter = executor_01::enter().unwrap();
         // Set the default tokio 0.1 reactor to the background compat reactor.
-        reactor_01::with_default(compat.reactor(), &mut enter, |enter| {
-            // This will set the default handle and timer to use inside the closure
-            // and run the future.
-            let _reactor = driver::set_default(&reactor_handle);
-            clock::with_default(clock, || {
-                // Set up a default timer for tokio 0.1 compat.
-                timer_02::with_default(compat.timer(), enter, |enter| {
-                    let _timer = timer::set_default(&timer_handle);
-                    // Set default executor for tokio 0.1 futures.
-                    let mut compat_exec = CompatExec {
-                        inner: current_thread::TaskExecutor::current(),
-                    };
-                    executor_01::with_default(&mut compat_exec, enter, |_enter| {
-                        // The TaskExecutor is a fake executor that looks into the
-                        // current single-threaded executor when used. This is a trick,
-                        // because we need two mutable references to the executor (one
-                        // to run the provided future, another to install as the default
-                        // one). We use the fake one here as the default one.
-                        let mut default_executor = current_thread::TaskExecutor::current();
-                        tokio_02::executor::with_default(&mut default_executor, || f(executor))
-                    })
-                })
-            })
-        })
-    }
-}
+        let _reactor = reactor_01::set_default(compat.reactor());
+        let _timer = timer_02::timer::set_default(compat.timer());
 
-impl executor_01::Executor for CompatExec {
-    fn spawn(
-        &mut self,
-        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
-    ) -> Result<(), executor_01::SpawnError> {
-        let future = future.compat().map(|_| ());
-        tokio_02::executor::Executor::spawn(&mut self.inner, Box::pin(future))
-            .map_err(compat::spawn_err)
+        executor_01::with_default(&mut spawner, &mut enter, |_enter| {
+            local.block_on(inner, idle_rx.recv())
+        });
+        Ok(())
     }
 
-    fn status(&self) -> Result<(), executor_01::SpawnError> {
-        tokio_02::executor::Executor::status(&self.inner).map_err(compat::spawn_err)
+    fn spawner(&self) -> compat::CompatSpawner<&Handle02> {
+        compat::CompatSpawner::new(self.inner.handle(), &self.idle)
     }
 }

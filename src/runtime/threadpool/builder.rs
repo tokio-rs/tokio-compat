@@ -183,10 +183,7 @@ impl Builder {
 
         let (idle, idle_rx) = super::idle::Idle::new();
         // Set the tokio 0.1 executor to be used by the worker threads.
-        *lock = Some(super::CompatSpawner {
-            inner: runtime.handle().clone(),
-            idle: idle.clone(),
-        });
+        *lock = Some(super::CompatSpawner::new(runtime.handle().clone(), &idle));
         drop(lock);
         let runtime = Runtime {
             inner: Some(Inner { runtime, compat_bg }),

@@ -114,7 +114,9 @@
 //! [`block_on_std`]: struct.Runtime.html#method.spawn_std
 //! [blocking]: https://docs.rs/tokio-threadpool/0.1.16/tokio_threadpool/fn.blocking.html
 mod compat;
-// pub mod current_thread;
+pub mod current_thread;
+mod idle;
+mod task_executor;
 #[cfg(feature = "rt-full")]
 mod threadpool;
 

@@ -74,15 +74,14 @@
 //! [timer]: ../../timer/index.html
 //! [timer-01]: https://docs.rs/tokio/0.1.22/tokio/timer/index.html
 //! [reactor-01]: https://docs.rs/tokio/0.1.22/tokio/reactor/struct.Reactor.html
-use super::compat;
+use super::{compat, idle};
 
 mod builder;
 mod runtime;
-mod task_executor;
 
 pub use self::builder::Builder;
 pub use self::runtime::{Handle, RunError, Runtime};
-pub use self::task_executor::TaskExecutor;
+pub use super::task_executor::TaskExecutor;
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, FutureExt};
@@ -95,7 +94,7 @@ use std::future::Future;
 /// [`Runtime::run`] to wait for any other spawned futures to resolve.
 pub fn block_on_all<F>(future: F) -> Result<F::Item, F::Error>
 where
-    F: Future01,
+    F: Future01 + 'static,
 {
     block_on_all_std(future.compat())
 }
@@ -107,7 +106,7 @@ where
 /// [`Runtime::run`] to wait for any other spawned futures to resolve.
 pub fn block_on_all_std<F>(future: F) -> F::Output
 where
-    F: Future,
+    F: Future + 'static,
 {
     let mut r = Runtime::new().expect("failed to start runtime on current thread");
     let v = r.block_on_std(future);

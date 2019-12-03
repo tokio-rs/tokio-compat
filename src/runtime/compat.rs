@@ -1,9 +1,13 @@
-use tokio_executor_01::{self as executor_01};
+use futures_01::{future::Future as Future01, sync::oneshot};
+
+use futures_util::{compat::Future01CompatExt, future::FutureExt};
+use std::{cell::RefCell, io, thread};
+use tokio_02::runtime::Handle;
+use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
 use tokio_timer_02::{clock as clock_02, timer as timer_02};
 
-use futures_01::sync::oneshot;
-use std::{cell::RefCell, io, thread};
+use super::idle;
 
 #[derive(Debug)]
 pub(super) struct Background {
@@ -11,6 +15,12 @@ pub(super) struct Background {
     timer_handle: timer_02::Handle,
     shutdown_tx: Option<oneshot::Sender<()>>,
     thread: Option<thread::JoinHandle<()>>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct CompatSpawner<S> {
+    pub(super) inner: S,
+    pub(super) idle: idle::Idle,
 }
 
 struct CompatGuards {
@@ -90,42 +100,67 @@ impl Drop for Background {
     }
 }
 
-// pub(super) fn spawn_err(new: tokio_02::executor::SpawnError) -> executor_01::SpawnError {
-//     match new {
-//         _ if new.is_shutdown() => executor_01::SpawnError::shutdown(),
-//         _ if new.is_at_capacity() => executor_01::SpawnError::at_capacity(),
-//         e => unreachable!("weird spawn error {:?}", e),
-//     }
-// }
+// === impl CompatSpawner ===
 
-// impl<P> park::Park for CompatPark<P>
-// where
-//     P: park_01::Park,
-// {
-//     type Unpark = CompatPark<P::Unpark>;
-//     type Error = P::Error;
+impl<T> CompatSpawner<T> {
+    pub(super) fn new(inner: T, idle: &idle::Idle) -> Self {
+        Self {
+            inner,
+            idle: idle.clone(),
+        }
+    }
+}
 
-//     fn unpark(&self) -> Self::Unpark {
-//         CompatPark(self.0.unpark())
-//     }
+impl<'a> executor_01::Executor for CompatSpawner<&'a Handle> {
+    fn spawn(
+        &mut self,
+        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
+    ) -> Result<(), executor_01::SpawnError> {
+        let future = future.compat().map(|_| ());
+        let idle = self.idle.reserve();
+        self.inner.spawn(idle.with(future));
+        Ok(())
+    }
+}
 
-//     #[inline]
-//     fn park(&mut self) -> Result<(), Self::Error> {
-//         self.0.park()
-//     }
+impl<'a, T> executor_01::TypedExecutor<T> for CompatSpawner<&'a Handle>
+where
+    T: Future01<Item = (), Error = ()> + Send + 'static,
+{
+    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
+        let idle = self.idle.reserve();
+        let future = Box::pin(idle.with(future.compat().map(|_| ())));
+        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
+        // future twice (once to spawn it using `Executor01::spawn` and a second
+        // time to pin the compat future).
+        self.inner.spawn(future);
+        Ok(())
+    }
+}
 
-//     #[inline]
-//     fn park_timeout(&mut self, duration: Duration) -> Result<(), Self::Error> {
-//         self.0.park_timeout(duration)
-//     }
-// }
+impl executor_01::Executor for CompatSpawner<Handle> {
+    fn spawn(
+        &mut self,
+        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
+    ) -> Result<(), executor_01::SpawnError> {
+        let future = future.compat().map(|_| ());
+        let idle = self.idle.reserve();
+        self.inner.spawn(idle.with(future));
+        Ok(())
+    }
+}
 
-// impl<U> park::Unpark for CompatPark<U>
-// where
-//     U: park_01::Unpark,
-// {
-//     #[inline]
-//     fn unpark(&self) {
-//         self.0.unpark()
-//     }
-// }
+impl<T> executor_01::TypedExecutor<T> for CompatSpawner<Handle>
+where
+    T: Future01<Item = (), Error = ()> + Send + 'static,
+{
+    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
+        let idle = self.idle.reserve();
+        let future = Box::pin(idle.with(future.compat().map(|_| ())));
+        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
+        // future twice (once to spawn it using `Executor01::spawn` and a second
+        // time to pin the compat future).
+        self.inner.spawn(future);
+        Ok(())
+    }
+}
