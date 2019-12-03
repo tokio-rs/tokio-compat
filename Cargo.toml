@@ -43,8 +43,6 @@ rt-current-thread = [
     "tokio-02/io-driver",
 ]
 rt-full = [
-    "tracing-core",
-    "num_cpus",
     "tokio-02/rt-threaded",
     "rt-current-thread",
 ]
@@ -62,9 +60,6 @@ tokio-reactor-01 = { package = "tokio-reactor", version = "0.1.11", optional = t
 tokio-executor-01 = { package = "tokio-executor", version = "0.1.9", optional = true }
 tokio-threadpool-01 = { package = "tokio-threadpool", version = "0.1", optional = true }
 tokio-current-thread-01 = { package = "tokio-current-thread", version = "0.1", optional = true }
-
-num_cpus =  { version = "1", optional = true }
-tracing-core = { version = "0.1", optional = true }
 
 [dev-dependencies]
 tokio-01 = { package = "tokio", version = "0.1" }
