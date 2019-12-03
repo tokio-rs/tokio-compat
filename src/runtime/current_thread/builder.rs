@@ -25,7 +25,7 @@ use tokio_timer_02::clock::Clock;
 ///
 /// ```
 /// use tokio_compat::runtime::current_thread::Builder;
-/// use tokio_02::timer::clock::Clock;
+/// use tokio_timer_02::clock::Clock;
 ///
 /// # pub fn main() {
 /// // build Runtime
