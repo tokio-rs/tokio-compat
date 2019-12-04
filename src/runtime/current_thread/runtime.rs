@@ -67,7 +67,7 @@ impl Handle {
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        self.0.spawn(self.idle.reserve().with(future));
+        self.inner.spawn(self.idle.reserve().with(future));
     }
 
     /// Provides a best effort **hint** to whether or not `spawn` will succeed.
