@@ -25,9 +25,8 @@ keywords = ["io", "async", "non-blocking", "futures"]
 [features]
 default = ["blocking", "rt-full", "sink"]
 blocking = [
-    "rt-full",
+    "rt-current-thread",
     "tokio-02/blocking",
-    "tokio-threadpool-01"
 ]
 # enables the compat runtimes.
 rt-current-thread = [
@@ -58,7 +57,6 @@ tokio-02 = { package = "tokio", version = "0.2.1", default-features = false }
 tokio-timer-02 = { package = "tokio-timer", version = "0.2.12", optional = true }
 tokio-reactor-01 = { package = "tokio-reactor", version = "0.1.11", optional = true  }
 tokio-executor-01 = { package = "tokio-executor", version = "0.1.9", optional = true }
-tokio-threadpool-01 = { package = "tokio-threadpool", version = "0.1", optional = true }
 tokio-current-thread-01 = { package = "tokio-current-thread", version = "0.1", optional = true }
 
 [dev-dependencies]
