@@ -116,7 +116,6 @@
 mod compat;
 pub mod current_thread;
 mod idle;
-mod task_executor;
 #[cfg(feature = "rt-full")]
 mod threadpool;
 

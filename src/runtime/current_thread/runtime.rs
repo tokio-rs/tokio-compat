@@ -1,12 +1,16 @@
 use super::{compat, idle, Builder};
 
-use tokio_02::{runtime::Handle as Handle02, task::LocalSet};
+use tokio_02::{
+    runtime::Handle as Handle02,
+    task::{JoinHandle, LocalSet},
+};
 use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
 use tokio_timer_02 as timer_02;
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
+use std::cell::Cell;
 use std::error::Error;
 use std::fmt;
 use std::future::Future;
@@ -324,7 +328,9 @@ impl Runtime {
         // Set the default tokio 0.1 reactor to the background compat reactor.
         let _reactor = reactor_01::set_default(compat.reactor());
         let _timer = timer_02::timer::set_default(compat.timer());
-        executor_01::with_default(&mut spawner, &mut enter, |_enter| mark_current(move || { local.block_on(inner, f) })
+        executor_01::with_default(&mut spawner, &mut enter, |_enter| {
+            mark_current(move || local.block_on(inner, f))
+        })
     }
 
     /// Run the executor to completion, blocking the thread until **all**
