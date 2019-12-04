@@ -114,3 +114,18 @@ fn block_on_std_01_spawn() {
     // is that we're able to spawn it successfully.
     rt.block_on_std(async { tokio_01::spawn(futures_01::future::lazy(|| Ok(()))) });
 }
+
+#[test]
+fn tokio_02_spawn_blocking_works() {
+    let ran = Arc::new(AtomicBool::new(false));
+    let ran2 = ran.clone();
+    super::run_std(async move {
+        println!("in future, before blocking");
+        tokio_02::task::spawn_blocking(move || {
+            println!("in blocking");
+            ran.store(true, Ordering::SeqCst);
+        }).await.expect("blocking task panicked!");
+        println!("blocking done");
+    });
+    assert!(ran2.load(Ordering::SeqCst));
+}

@@ -129,33 +129,19 @@ fn tokio_02_spawn_blocking_works() {
     assert!(ran2.load(Ordering::SeqCst));
 }
 
-
-// #[test]
-// #[cfg(feature = "blocking")]
-// fn blocking() {
-//     let ran = Arc::new(AtomicBool::new(false));
-//     let ran2 = ran.clone();
-//     super::run_std(async move {
-//         tokio_threadpool_01::blocking(move || {
-//             println!("blocking!");
-//             ran.store(true, Ordering::SeqCst);
-//         }).unwrap();
-//     });
-//     assert!(ran2.load(Ordering::SeqCst));
-// }
-
-
-// #[test]
-// #[cfg(feature = "blocking")]
-// fn blocking_in_block_on() {
-//     let ran = Arc::new(AtomicBool::new(false));
-//     let ran2 = ran.clone();
-//     let mut rt = super::Runtime::new().unwrap();
-//     rt.block_on_std(async move {
-//         tokio_threadpool_01::blocking(move || {
-//             println!("blocking!");
-//             ran.store(true, Ordering::SeqCst);
-//         }).unwrap();
-//     });
-//     assert!(ran2.load(Ordering::SeqCst));
-// }
+#[test]
+fn tokio_02_block_in_place_works() {
+    let ran = Arc::new(AtomicBool::new(false));
+    let ran2 = ran.clone();
+    super::run_std(async move {
+        println!("in future, before blocking");
+        tokio_02::task::spawn(async move {
+            tokio_02::task::block_in_place(move || {
+                println!("in blocking");
+                ran.store(true, Ordering::SeqCst);
+            })
+        }).await.expect("blocking task panicked!");
+        println!("blocking done");
+    });
+    assert!(ran2.load(Ordering::SeqCst));
+}
