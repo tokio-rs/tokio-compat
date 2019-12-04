@@ -1,7 +1,8 @@
 mod builder;
+mod task_executor;
 
 #[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
-pub use super::task_executor::TaskExecutor;
+pub use self::task_executor::TaskExecutor;
 #[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
 pub use builder::Builder;
 

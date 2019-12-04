@@ -39,14 +39,17 @@ pub struct Handle {
     idle: idle::Idle,
 }
 
+thread_local! {
+    static IS_CURRENT: Cell<bool> = Cell::new(false);
+}
+
 impl Handle {
     /// Spawn a `futures` 0.1 future onto the `CurrentThread` runtime instance
     /// corresponding to this handle.
     ///
-    /// # Panics
-    ///
-    /// This function panics if the spawn fails. Failure occurs if the `CurrentThread`
-    /// instance of the `Handle` does not exist anymore.
+    /// Note that unlike the `tokio` 0.1 version of this function, this method
+    /// never actually returns `Err` — it returns `Result` only for API
+    /// compatibility.
     pub fn spawn<F>(&self, future: F) -> Result<(), executor_01::SpawnError>
     where
         F: Future01<Item = (), Error = ()> + Send + 'static,
@@ -58,16 +61,84 @@ impl Handle {
 
     /// Spawn a `std::future` future onto the `CurrentThread` runtime instance
     /// corresponding to this handle.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the spawn fails. Failure occurs if the `CurrentThread`
-    /// instance of the `Handle` does not exist anymore.
-    pub fn spawn_std<F>(&self, future: F)
+    pub fn spawn_std<F>(&self, future: F) -> Result<(), executor_01::SpawnError>
     where
         F: Future<Output = ()> + Send + 'static,
     {
         self.inner.spawn(self.idle.reserve().with(future));
+        Ok(())
+    }
+
+    /// Spawn a `futures` 0.1 future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `futures` 0.1 future onto the runtime
+    /// executor.spawn(futures_01::future::lazy(|| {
+    ///     println!("now running on a worker thread");
+    ///     Ok(())
+    /// }));
+    /// # }
+    /// ```
+    pub fn spawn_handle<F>(&self, future: F) -> JoinHandle<Result<F::Item, F::Error>>
+    where
+        F: Future01 + Send + 'static,
+        F::Item: Send + 'static,
+        F::Error: Send + 'static,
+    {
+        self.spawn_handle_std(Box::pin(future.compat()))
+    }
+
+    /// Spawn a `std::future` future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    ///
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `std::future` future onto the runtime
+    /// executor.spawn_std(async {
+    ///     println!("now running on a worker thread");
+    /// });
+    /// # }
+    /// ```
+    pub fn spawn_handle_std<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        let idle = self.inner.idle.reserve();
+        self.inner.inner.spawn(idle.with(future))
     }
 
     /// Provides a best effort **hint** to whether or not `spawn` will succeed.
@@ -253,7 +324,7 @@ impl Runtime {
         // Set the default tokio 0.1 reactor to the background compat reactor.
         let _reactor = reactor_01::set_default(compat.reactor());
         let _timer = timer_02::timer::set_default(compat.timer());
-        executor_01::with_default(&mut spawner, &mut enter, |_enter| local.block_on(inner, f))
+        executor_01::with_default(&mut spawner, &mut enter, |_enter| mark_current(move || { local.block_on(inner, f) })
     }
 
     /// Run the executor to completion, blocking the thread until **all**
@@ -275,8 +346,30 @@ impl Runtime {
         let _timer = timer_02::timer::set_default(compat.timer());
 
         executor_01::with_default(&mut spawner, &mut enter, |_enter| {
-            local.block_on(inner, idle_rx.recv())
+            mark_current(move || local.block_on(inner, idle_rx.recv()))
         });
         Ok(())
     }
+}
+
+pub(super) fn is_current() -> bool {
+    IS_CURRENT.try_with(|c| c.get()).unwrap_or(false)
+}
+
+fn mark_current<T>(f: impl FnOnce() -> T) -> T {
+    struct Reset(());
+
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            // this may fail if we're already panicking, ignore that.
+            let _ = IS_CURRENT.try_with(|c| {
+                c.set(false);
+            });
+        }
+    }
+
+    let was_current = IS_CURRENT.with(|c| c.replace(true));
+    assert_eq!(was_current, false, "entered current_thread runtime twice!");
+    let reset = Reset(());
+    f()
 }
