@@ -69,7 +69,8 @@ impl Handle {
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        self.inner.spawn(self.idle.reserve().with(future));
+        let idle = self.idle.reserve();
+        self.inner.spawn(idle.with(future));
         Ok(())
     }
 
@@ -82,7 +83,12 @@ impl Handle {
     ///
     /// See [module level][mod] documentation for more details.
     ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
+    /// with a `JoinHandle` for  awaiting their completion.
+    ///
     /// [mod]: index.html
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
     ///
     /// # Examples
     ///
@@ -106,7 +112,8 @@ impl Handle {
         F::Item: Send + 'static,
         F::Error: Send + 'static,
     {
-        self.spawn_handle_std(Box::pin(future.compat()))
+        let future = Box::pin(future.compat());
+        self.spawn_handle_std(future)
     }
 
     /// Spawn a `std::future` future onto the Tokio runtime, returning a
@@ -117,6 +124,13 @@ impl Handle {
     /// until it completes.
     ///
     /// See [module level][mod] documentation for more details.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
+    /// with a `JoinHandle` for  awaiting their completion.
+    ///
+    /// [mod]: index.html
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
     ///
     /// [mod]: index.html
     ///
@@ -141,8 +155,7 @@ impl Handle {
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        let idle = self.inner.idle.reserve();
-        self.inner.inner.spawn(idle.with(future))
+        self.inner.spawn(future)
     }
 
     /// Provides a best effort **hint** to whether or not `spawn` will succeed.
@@ -226,16 +239,12 @@ impl Runtime {
     /// }));
     /// # }
     /// ```
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the spawn fails. Failure occurs if the executor
-    /// is currently at capacity and is unable to spawn a new future.
     pub fn spawn<F>(&mut self, future: F) -> &mut Self
     where
         F: Future01<Item = (), Error = ()> + 'static,
     {
-        self.spawn_std(future.compat().map(|_| ()))
+        let future = future.compat().map(|_| ());
+        self.spawn_std(future)
     }
 
     /// Spawn a `std::future` future onto the single-threaded Tokio runtime.
@@ -259,16 +268,12 @@ impl Runtime {
     /// });
     /// # }
     /// ```
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the spawn fails. Failure occurs if the executor
-    /// is currently at capacity and is unable to spawn a new future.
     pub fn spawn_std<F>(&mut self, future: F) -> &mut Self
     where
         F: Future<Output = ()> + 'static,
     {
-        self.local.spawn_local(self.idle.reserve().with(future));
+        let idle = self.idle.reserve();
+        self.local.spawn_local(idle.with(future));
         self
     }
 

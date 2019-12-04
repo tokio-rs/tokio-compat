@@ -14,7 +14,10 @@ use super::{
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
 use std::{future::Future, io};
-use tokio_02::runtime::{self, Handle};
+use tokio_02::{
+    runtime::{self, Handle},
+    task::JoinHandle,
+};
 use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
 
@@ -98,7 +101,9 @@ pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()> + Send + 'static,
 {
-    run_std(future.compat().map(|_| ()))
+    let runtime = Runtime::new().expect("failed to start new Runtime");
+    runtime.spawn(future);
+    runtime.shutdown_on_idle();
 }
 
 /// Start the Tokio runtime using the supplied `std::future` future to bootstrap
@@ -149,10 +154,9 @@ pub fn run_std<F>(future: F)
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    // Check enter before creating a new Runtime...
-    let runtime = Runtime::new().expect("failed to start new Runtime");
-    runtime.spawn_std(future);
-    println!("run std spawned");
+    let mut runtime = Runtime::new().expect("failed to start new Runtime");
+    runtime.spawn(futures_01::future::lazy(|| Ok(())));
+    runtime.block_on_std(future);
     runtime.shutdown_on_idle();
 }
 
@@ -289,6 +293,91 @@ impl Runtime {
         self
     }
 
+    /// Spawn a `futures` 0.1 future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// `shutdown_on_idle`, since they are paired with a `JoinHandle` for
+    /// awaiting their completion.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `futures` 0.1 future onto the runtime
+    /// executor.spawn(futures_01::future::lazy(|| {
+    ///     println!("now running on a worker thread");
+    ///     Ok(())
+    /// }));
+    /// # }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the spawn fails. Failure occurs if the executor
+    /// is currently at capacity and is unable to spawn a new future.
+    pub fn spawn_handle<F>(&self, future: F) -> JoinHandle<Result<F::Item, F::Error>>
+    where
+        F: Future01 + Send + 'static,
+        F::Item: Send + 'static,
+        F::Error: Send + 'static,
+    {
+        let future = Box::pin(future.compat());
+        self.spawn_handle_std(future)
+    }
+
+    /// Spawn a `std::future` future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// `shutdown_on_idle`, since they are paired with a `JoinHandle` for
+    /// awaiting their completion.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    ///
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `std::future` future onto the runtime
+    /// executor.spawn_std(async {
+    ///     println!("now running on a worker thread");
+    /// });
+    /// # }
+    /// ```
+    pub fn spawn_handle_std<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.inner().runtime.spawn(future)
+    }
+
     /// Run a `futures` 0.1 future to completion on the Tokio runtime.
     ///
     /// This runs the given future on the runtime, blocking until it is
@@ -346,6 +435,11 @@ impl Runtime {
     ///
     /// See [module level][mod] documentation for more details.
     ///
+    /// **Note**: tasks spawned with associated [`JoinHandle`]s do _not_ "count"
+    /// towards `shutdown_on_idle`. Since `shutdown_on_idle` does not exist in
+    /// `tokio` 0.2, this is intended as a _transitional_ API; its use should be
+    /// phased out in favor of waiting on `JoinHandle`s.
+    ///
     /// # Examples
     ///
     /// ```
@@ -362,6 +456,7 @@ impl Runtime {
     /// ```
     ///
     /// [mod]: index.html
+    /// [`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
     pub fn shutdown_on_idle(mut self) {
         let spawner = self.spawner();
         let Inner {

@@ -124,7 +124,9 @@ pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()> + 'static,
 {
-    run_std(future.compat().map(|_| ()))
+    let mut r = Runtime::new().expect("failed to start runtime on current thread");
+    r.spawn(future);
+    r.run().expect("failed to resolve remaining futures");
 }
 
 /// Start a current-thread runtime using the supplied `std::future` ture to bootstrap execution.
@@ -137,8 +139,10 @@ where
     F: Future<Output = ()> + 'static,
 {
     let mut r = Runtime::new().expect("failed to start runtime on current thread");
-    r.spawn_std(future);
+    r.spawn(futures_01::future::lazy(|| Ok(())));
+    let v = r.block_on_std(future);
     r.run().expect("failed to resolve remaining futures");
+    v
 }
 
 #[cfg(test)]
