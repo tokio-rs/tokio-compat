@@ -91,7 +91,7 @@
 //! [`run_std`], [`spawn_std`], and [`block_on_std`].
 //!
 //! Also, please note that the compatibility thread pool runtime does **not**
-//! currently support the `tokio` 0.1 [`tokio_threadpool::blocking][blocking]
+//! currently support the `tokio` 0.1 [`tokio_threadpool::blocking`][blocking]
 //! API. Calls to the legacy version of `blocking` made on the compatibility
 //! runtime will currently fail. In the future, `tokio-compat` will allow
 //! transparently replacing legacy `blocking` with the `tokio` 0.2 blocking
