@@ -1,7 +1,8 @@
+use super::Runtime;
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, FutureExt};
 use std::future::Future;
-use tokio_executor_01::{self as executor_01};
+use tokio_executor_01 as executor_01;
 
 #[derive(Debug)]
 pub struct TaskExecutor {
@@ -21,7 +22,7 @@ impl TaskExecutor {
         TaskExecutor { _p: () }
     }
 
-    /// Spawn a future onto the current `CurrentThread` instance.
+    /// Spawn a `futures` 0.1 future onto the current `CurrentThread` instance.
     pub fn spawn_local(
         &mut self,
         future: Box<dyn Future01<Item = (), Error = ()>>,
@@ -29,12 +30,71 @@ impl TaskExecutor {
         self.spawn_local_std(future.compat().map(|_| ()))
     }
 
+    /// Spawn a `std::futures`  future onto the current `CurrentThread`
+    /// instance.
     pub fn spawn_local_std(
         &mut self,
         future: impl Future<Output = ()> + 'static,
     ) -> Result<(), executor_01::SpawnError> {
-        if super::runtime::is_current() {
-            tokio_02::task::spawn_local(future);
+        if let Some(idle) = Runtime::reserve_idle() {
+            tokio_02::task::spawn_local(idle.with(future));
+            Ok(())
+        } else {
+            Err(executor_01::SpawnError::shutdown())
+        }
+    }
+
+    /// Spawn a `futures` 0.1 future onto the current `CurrentThread` instance,
+    /// returning a `JoinHandle` that can be used to await its result.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// [`shutdown_on_idle`], since they are paired with a `JoinHandle` for
+    /// awaiting their completion.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is no current runtime, or if the current
+    /// runtime is not a current-thread runtime.
+    ///
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    pub fn spawn_handle<T: 'static, E: 'static>(
+        &mut self,
+        future: Box<dyn Future01<Item = T, Error = E>>,
+    ) -> tokio_02::task::JoinHandle<Result<T, E>> {
+        self.spawn_handle_std(future.compat())
+    }
+
+    /// Spawn a `std::future` future onto the current `CurrentThread` instance,
+    /// returning a `JoinHandle` that can be used to await its result.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// [`shutdown_on_idle`], since they are paired with a `JoinHandle` for
+    /// awaiting their completion.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is no current runtime, or if the current
+    /// runtime is not a current-thread runtime.
+    ///
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    pub fn spawn_handle_std<T: 'static>(
+        &mut self,
+        future: impl Future<Output = T> + 'static,
+    ) -> tokio_02::task::JoinHandle<T> {
+        tokio_02::task::spawn_local(future)
+    }
+}
+
+impl executor_01::Executor for TaskExecutor {
+    fn spawn(
+        &mut self,
+        future: Box<dyn Future01<Item = (), Error = ()> + Send>,
+    ) -> Result<(), executor_01::SpawnError> {
+        self.spawn_local(future)
+    }
+
+    fn status(&self) -> Result<(), executor_01::SpawnError> {
+        if Runtime::is_current() {
             Ok(())
         } else {
             Err(executor_01::SpawnError::shutdown())
@@ -42,20 +102,15 @@ impl TaskExecutor {
     }
 }
 
-impl tokio_executor_01::Executor for TaskExecutor {
-    fn spawn(
-        &mut self,
-        future: Box<dyn Future01<Item = (), Error = ()> + Send>,
-    ) -> Result<(), executor_01::SpawnError> {
-        self.spawn_local(future)
-    }
-}
-
-impl<F> tokio_executor_01::TypedExecutor<F> for TaskExecutor
+impl<F> executor_01::TypedExecutor<F> for TaskExecutor
 where
     F: Future01<Item = (), Error = ()> + 'static,
 {
     fn spawn(&mut self, future: F) -> Result<(), executor_01::SpawnError> {
         self.spawn_local(Box::new(future))
+    }
+
+    fn status(&self) -> Result<(), executor_01::SpawnError> {
+        executor_01::Executor::status(self)
     }
 }

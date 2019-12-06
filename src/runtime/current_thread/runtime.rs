@@ -10,7 +10,7 @@ use tokio_timer_02 as timer_02;
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::error::Error;
 use std::fmt;
 use std::future::Future;
@@ -50,6 +50,7 @@ pub struct Handle {
 }
 
 thread_local! {
+    static CURRENT_IDLE: RefCell<Option<idle::Idle>> = RefCell::new(None);
     static IS_CURRENT: Cell<bool> = Cell::new(false);
 }
 
@@ -341,9 +342,9 @@ impl Runtime {
         // Set the default tokio 0.1 reactor to the background compat reactor.
         let _reactor = reactor_01::set_default(compat.reactor());
         let _timer = timer_02::timer::set_default(compat.timer());
-        let idle = self.idle.reserve();
+        let track = self.idle.reserve();
         executor_01::with_default(&mut spawner, &mut enter, |_enter| {
-            mark_current(move || local.block_on(inner, idle.with(f)))
+            Self::with_idle(idle, move || local.block_on(inner, track.with(f)))
         })
     }
 
@@ -366,30 +367,43 @@ impl Runtime {
         let _timer = timer_02::timer::set_default(compat.timer());
 
         executor_01::with_default(&mut spawner, &mut enter, |_enter| {
-            mark_current(move || local.block_on(inner, idle_rx.recv()))
+            Self::with_idle(idle, move || local.block_on(inner, idle_rx.recv()))
         });
         Ok(())
     }
-}
 
-pub(super) fn is_current() -> bool {
-    IS_CURRENT.try_with(|c| c.get()).unwrap_or(false)
-}
+    fn with_idle<T>(idle: &idle::Idle, f: impl FnOnce() -> T) -> T {
+        struct Reset<'a>(&'a RefCell<Option<idle::Idle>>);
 
-fn mark_current<T>(f: impl FnOnce() -> T) -> T {
-    struct Reset(());
-
-    impl Drop for Reset {
-        fn drop(&mut self) {
-            // this may fail if we're already panicking, ignore that.
-            let _ = IS_CURRENT.try_with(|c| {
-                c.set(false);
-            });
+        impl<'a> Drop for Reset<'a> {
+            fn drop(&mut self) {
+                self.0.borrow_mut().take();
+            }
         }
+
+        let idle = idle.clone();
+        CURRENT_IDLE.with(move |c| {
+            let was_empty = c.borrow_mut().replace(idle).is_none();
+            assert!(was_empty, "entered current_thread runtime twice!");
+
+            let _reset = Reset(c);
+            f()
+        })
     }
 
-    let was_current = IS_CURRENT.with(|c| c.replace(true));
-    assert_eq!(was_current, false, "entered current_thread runtime twice!");
-    let _reset = Reset(());
-    f()
+    pub(super) fn reserve_idle() -> Option<idle::Track> {
+        CURRENT_IDLE
+            .try_with(|c| {
+                let idle = c.borrow();
+                Some(idle.as_ref()?.reserve())
+            })
+            .ok()
+            .and_then(|x| x)
+    }
+
+    pub(super) fn is_current() -> bool {
+        CURRENT_IDLE
+            .try_with(|c| c.borrow().is_some())
+            .unwrap_or(false)
+    }
 }
