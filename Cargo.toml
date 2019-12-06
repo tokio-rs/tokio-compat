@@ -14,7 +14,7 @@ authors = ["Tokio Contributors <team@tokio.rs>"]
 license = "MIT"
 readme = "README.md"
 documentation = "https://docs.rs/tokio-compat/0.1.0-alpha.1/tokio-compat/"
-repository = "https://github.com/tokio-rs/tokio"
+repository = "https://github.com/tokio-rs/tokio-compat"
 homepage = "https://tokio.rs"
 description = """
 Compatibility between `tokio` 0.2 and legacy versions.
