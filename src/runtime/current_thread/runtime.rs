@@ -24,8 +24,14 @@ use std::io;
 /// [mod]: index.html
 #[derive(Debug)]
 pub struct Runtime {
+    /// The inner `tokio` 0.2 runtime.
     inner: tokio_02::runtime::Runtime,
+
+    /// Runs local futures to re-implement `tokio` 0.1's
+    /// `current_thread::Runtime::spawn_local`.
     local: LocalSet,
+
+    /// Idleness tracking for `shutdown_on_idle`.
     idle: idle::Idle,
     idle_rx: idle::Rx,
 
@@ -211,6 +217,9 @@ impl Runtime {
     ///
     /// Different to the runtime itself, the handle can be sent to different
     /// threads.
+    ///
+    /// Unlike the `tokio` 0.1 `current_thread::Handle`, this handle can spawn
+    /// both `futures` 0.1 and `std::future` tasks.
     pub fn handle(&self) -> Handle {
         let inner = self.inner.handle().clone();
         let idle = self.idle.clone();

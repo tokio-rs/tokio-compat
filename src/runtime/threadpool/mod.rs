@@ -35,9 +35,13 @@ use tokio_timer_02 as timer_02;
 /// [rt]: https://docs.rs/tokio/0.2.0-alpha.6/tokio/runtime/struct.Runtime.html
 #[derive(Debug)]
 pub struct Runtime {
+    /// The actual runtime. This is in an option so that it can be dropped when
+    /// shutting down.
     inner: Option<Inner>,
+
+    /// Idleness tracking.
     idle: idle::Idle,
-    idle_rx: tokio_02::sync::mpsc::Receiver<()>,
+    idle_rx: idle::Rx,
 }
 
 #[derive(Debug)]
