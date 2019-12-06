@@ -159,7 +159,6 @@ where
     F: Future<Output = ()> + Send + 'static,
 {
     let mut runtime = Runtime::new().expect("failed to start new Runtime");
-    runtime.spawn(futures_01::future::lazy(|| Ok(())));
     runtime.block_on_std(future);
     runtime.shutdown_on_idle();
 }
@@ -417,13 +416,14 @@ impl Runtime {
     where
         F: Future,
     {
+        let idle = self.idle.reserve();
         let spawner = self.spawner();
         let inner = self.inner_mut();
         let compat = &inner.compat_bg;
         let _timer = timer_02::timer::set_default(compat.timer());
         let _reactor = reactor_01::set_default(compat.reactor());
         let _executor = executor_01::set_default(spawner);
-        inner.runtime.block_on(future)
+        inner.runtime.block_on(idle.with(future))
     }
 
     /// Signals the runtime to shutdown once it becomes idle.

@@ -341,8 +341,9 @@ impl Runtime {
         // Set the default tokio 0.1 reactor to the background compat reactor.
         let _reactor = reactor_01::set_default(compat.reactor());
         let _timer = timer_02::timer::set_default(compat.timer());
+        let idle = self.idle.reserve();
         executor_01::with_default(&mut spawner, &mut enter, |_enter| {
-            mark_current(move || local.block_on(inner, f))
+            mark_current(move || local.block_on(inner, idle.with(f)))
         })
     }
 
