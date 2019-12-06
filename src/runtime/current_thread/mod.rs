@@ -85,7 +85,7 @@ pub use self::runtime::{Handle, RunError, Runtime};
 pub use self::task_executor::TaskExecutor;
 
 use futures_01::future::Future as Future01;
-use futures_util::{compat::Future01CompatExt, FutureExt};
+use futures_util::compat::Future01CompatExt;
 use std::future::Future;
 
 /// Run the provided `futures` 0.1 future to completion using a runtime running on the current thread.

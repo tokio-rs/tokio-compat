@@ -65,8 +65,7 @@ impl Handle {
         F: Future01<Item = (), Error = ()> + Send + 'static,
     {
         let future = future.compat().map(|_| ());
-        self.spawn_std(future);
-        Ok(())
+        self.spawn_std(future)
     }
 
     /// Spawn a `std::future` future onto the `CurrentThread` runtime instance
@@ -390,6 +389,6 @@ fn mark_current<T>(f: impl FnOnce() -> T) -> T {
 
     let was_current = IS_CURRENT.with(|c| c.replace(true));
     assert_eq!(was_current, false, "entered current_thread runtime twice!");
-    let reset = Reset(());
+    let _reset = Reset(());
     f()
 }

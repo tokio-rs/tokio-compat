@@ -1,7 +1,7 @@
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, FutureExt};
 use std::future::Future;
-use tokio_executor_01::{self as executor_01, Executor as Executor01};
+use tokio_executor_01::{self as executor_01};
 
 #[derive(Debug)]
 pub struct TaskExecutor {
@@ -45,7 +45,7 @@ impl TaskExecutor {
 impl tokio_executor_01::Executor for TaskExecutor {
     fn spawn(
         &mut self,
-        future: Box<Future01<Item = (), Error = ()> + Send>,
+        future: Box<dyn Future01<Item = (), Error = ()> + Send>,
     ) -> Result<(), executor_01::SpawnError> {
         self.spawn_local(future)
     }
