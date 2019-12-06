@@ -51,7 +51,6 @@ pub struct Handle {
 
 thread_local! {
     static CURRENT_IDLE: RefCell<Option<idle::Idle>> = RefCell::new(None);
-    static IS_CURRENT: Cell<bool> = Cell::new(false);
 }
 
 impl Handle {
