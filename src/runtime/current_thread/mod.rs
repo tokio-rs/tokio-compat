@@ -144,6 +144,3 @@ where
     r.run().expect("failed to resolve remaining futures");
     v
 }
-
-#[cfg(test)]
-mod tests;

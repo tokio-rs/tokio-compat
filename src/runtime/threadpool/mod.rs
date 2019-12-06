@@ -534,6 +534,3 @@ impl Drop for Runtime {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;
