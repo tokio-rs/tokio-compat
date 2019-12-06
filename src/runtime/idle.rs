@@ -45,13 +45,9 @@ impl Track {
     pub(super) async fn with<T>(mut self, f: impl Future<Output = T>) -> T {
         let result = f.await;
         let spawned = self.0.spawned.fetch_sub(1, Ordering::Release);
-        println!("idle done; spawned={:?}", spawned);
         if spawned == 1 {
             fence(Ordering::Acquire);
-
-            println!("sending idle");
             let _ = self.0.tx.send(()).await;
-            println!("idle sent");
         }
         result
     }
