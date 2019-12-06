@@ -12,6 +12,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: rust-toolchain
+      uses: actions-rs/toolchain@v1.0.3
+      with: 
+        toolchain: ${{ matrix.toolchain }}
     - name: cargo check
       uses: actions-rs/cargo@v1.0.1
       with:
@@ -28,6 +32,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
+    - name: rust-toolchain
+      uses: actions-rs/toolchain@v1.0.3
+      with: 
+        toolchain: ${{ matrix.toolchain }}
     - name: build
       uses: actions-rs/cargo@v1.0.1
       with:
@@ -46,6 +54,10 @@ jobs:
     
     steps:
       - uses: actions/checkout@v1
+      - name: rust-toolchain
+        uses: actions-rs/toolchain@v1.0.3
+        with: 
+          toolchain: stable
       - run: rustup component add clippy
       - uses: actions-rs/clippy-check@v1
         with:
