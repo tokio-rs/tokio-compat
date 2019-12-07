@@ -16,6 +16,7 @@ use futures_util::{compat::Future01CompatExt, future::FutureExt};
 use std::{future::Future, io};
 use tokio_02::{
     runtime::{self, Handle},
+    sync::oneshot,
     task::JoinHandle,
 };
 use tokio_executor_01 as executor_01;
@@ -42,6 +43,16 @@ pub struct Runtime {
     /// Idleness tracking.
     idle: idle::Idle,
     idle_rx: idle::Rx,
+}
+
+pin_project_lite::pin_project! {
+
+    /// A future that resolves when the Tokio `Runtime` is shut down.
+    #[derive(Debug)]
+    pub struct Shutdown {
+        #[pin]
+        inner: oneshot::Receiver<()>,
+    }
 }
 
 #[derive(Debug)]
@@ -465,7 +476,7 @@ impl Runtime {
     ///
     /// [mod]: index.html
     /// [`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
-    pub fn shutdown_on_idle(mut self) {
+    pub fn shutdown_on_idle(mut self) -> Shutdown {
         let spawner = self.spawner();
         let Inner {
             compat_bg,
@@ -475,7 +486,10 @@ impl Runtime {
         let _reactor = reactor_01::set_default(compat_bg.reactor());
         let _executor = executor_01::set_default(spawner);
         let idle = &mut self.idle_rx;
+        let (tx, rx) = oneshot::channel();
         runtime.block_on(idle.recv());
+        tx.send(()).unwrap();
+        Shutdown { inner: rx }
     }
 
     /// Signals the runtime to shutdown immediately.
@@ -511,8 +525,12 @@ impl Runtime {
     /// ```
     ///
     /// [mod]: index.html
-    pub fn shutdown_now(mut self) {
-        drop(self.inner.take().unwrap())
+    pub fn shutdown_now(mut self) -> Shutdown {
+        let (tx, rx) = oneshot::channel();
+        tx.send(()).unwrap();
+        drop(self.inner.take().unwrap());
+
+        Shutdown { inner: rx }
     }
 
     fn spawner(&self) -> CompatSpawner<Handle> {
@@ -536,5 +554,15 @@ impl Drop for Runtime {
         if let Some(inner) = self.inner.take() {
             drop(inner);
         }
+    }
+}
+
+impl std::future::Future for Shutdown {
+    type Output = ();
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        self.project().inner.poll(cx).map(|_| ())
     }
 }
