@@ -10,7 +10,7 @@ use tokio_timer_02 as timer_02;
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt;
 use std::future::Future;
