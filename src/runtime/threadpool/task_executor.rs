@@ -95,12 +95,12 @@ impl TaskExecutor {
     ///
     /// **Note** that futures spawned in this manner do not "count" towards
     /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
-    /// with a `JoinHandle` for  awaiting their completion.
-    ///
-    /// See [module level][mod] documentation for more details.
+    /// with a `JoinHandle` for  awaiting their completion. See [here] for
+    /// details on shutting down the compatibility runtime.
     ///
     /// [mod]: index.html
     /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    /// [here]: index.html#shutting-down
     ///
     /// # Examples
     ///
@@ -139,10 +139,12 @@ impl TaskExecutor {
     ///
     /// **Note** that futures spawned in this manner do not "count" towards
     /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
-    /// with a `JoinHandle` for  awaiting their completion.
+    /// with a `JoinHandle` for  awaiting their completion. See [here] for
+    /// details on shutting down the compatibility runtime.
     ///
     /// [mod]: index.html
     /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    /// [here]: index.html#shutting-down
     ///
     /// # Examples
     ///

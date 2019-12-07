@@ -305,11 +305,13 @@ impl Runtime {
     ///
     /// **Note** that futures spawned in this manner do not "count" towards
     /// `shutdown_on_idle`, since they are paired with a `JoinHandle` for
-    /// awaiting their completion.
+    /// awaiting their completion. See [here] for details on shutting down
+    /// the compatibility runtime.
     ///
     /// See [module level][mod] documentation for more details.
     ///
     /// [mod]: index.html
+    /// [here]: index.html#shutting-down
     ///
     /// # Examples
     ///
@@ -351,11 +353,13 @@ impl Runtime {
     ///
     /// **Note** that futures spawned in this manner do not "count" towards
     /// `shutdown_on_idle`, since they are paired with a `JoinHandle` for
-    /// awaiting their completion.
+    /// awaiting their completion. See [here] for details on shutting down
+    /// the compatibility runtime.
     ///
     /// See [module level][mod] documentation for more details.
     ///
     /// [mod]: index.html
+    /// [here]: index.html#shutting-down
     ///
     /// # Examples
     ///

@@ -4,6 +4,13 @@ use futures_util::{compat::Future01CompatExt, FutureExt};
 use std::future::Future;
 use tokio_executor_01 as executor_01;
 
+/// Executes futures on the current thread.
+///
+/// All futures executed using this executor will be executed on the current
+/// thread. As such, `run` will wait for these futures to complete before
+/// returning, if they are spawned without a `JoinHandle`.
+///
+/// For more details, see the [module level](index.html) documentation.
 #[derive(Debug)]
 pub struct TaskExecutor {
     _p: (),
@@ -48,15 +55,17 @@ impl TaskExecutor {
     /// returning a `JoinHandle` that can be used to await its result.
     ///
     /// **Note** that futures spawned in this manner do not "count" towards
-    /// [`shutdown_on_idle`], since they are paired with a `JoinHandle` for
-    /// awaiting their completion.
+    /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
+    /// with a `JoinHandle` for  awaiting their completion. See [here] for
+    /// details on shutting down the compatibility runtime.
+    ///
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    /// [here]: ../index.html#shutting-down
     ///
     /// # Panics
     ///
     /// This function panics if there is no current runtime, or if the current
     /// runtime is not a current-thread runtime.
-    ///
-    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
     pub fn spawn_handle<T: 'static, E: 'static>(
         &mut self,
         future: Box<dyn Future01<Item = T, Error = E>>,
@@ -68,15 +77,17 @@ impl TaskExecutor {
     /// returning a `JoinHandle` that can be used to await its result.
     ///
     /// **Note** that futures spawned in this manner do not "count" towards
-    /// [`shutdown_on_idle`], since they are paired with a `JoinHandle` for
-    /// awaiting their completion.
+    /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
+    /// with a `JoinHandle` for  awaiting their completion. See [here] for
+    /// details on shutting down the compatibility runtime.
+    ///
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    /// [here]: ../index.html#shutting-down
     ///
     /// # Panics
     ///
     /// This function panics if there is no current runtime, or if the current
     /// runtime is not a current-thread runtime.
-    ///
-    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
     pub fn spawn_handle_std<T: 'static>(
         &mut self,
         future: impl Future<Output = T> + 'static,
