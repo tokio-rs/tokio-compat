@@ -32,7 +32,7 @@ use tokio_timer_02 as timer_02;
 /// runtime services. and `futures` 0.1 tasks that use `tokio` 0.1 runtime
 /// services.
 ///
-/// [rt]: https://docs.rs/tokio/0.2.0-alpha.6/tokio/runtime/struct.Runtime.html
+/// [rt]: https://docs.rs/tokio/0.2.4/tokio/runtime/struct.Runtime.html
 #[derive(Debug)]
 pub struct Runtime {
     /// The actual runtime. This is in an option so that it can be dropped when

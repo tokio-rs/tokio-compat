@@ -67,7 +67,7 @@
 //! [rt]: struct.Runtime.html
 //! [concurrent-rt]: ../struct.Runtime.html
 //! [default-rt]:
-//!     https://docs.rs/tokio/0.2.0-alpha.6/tokio/runtime/current_thread/struct.Runtime.html
+//!     https://docs.rs/tokio/0.2.4/tokio/runtime/current_thread/struct.Runtime.html
 //! [chan]: https://docs.rs/futures/0.1/futures/sync/mpsc/fn.channel.html
 //! [reactor]: ../../reactor/struct.Reactor.html
 //! [executor]: https://tokio.rs/docs/internals/runtime-model/#executors

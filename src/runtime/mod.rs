@@ -22,9 +22,8 @@
 //!
 //! Creating a [`Runtime`] does the following:
 //!
-//! * Spawn a background thread running a [`Reactor`] instance.
-//! * Start a [`ThreadPool`] for executing futures.
-//! * Run an instance of [`Timer`] **per** thread pool worker thread.
+//! * Start a [thread pool] for executing futures.
+//! * Run [resource drivers] for the timer and I/O resources.
 //! * Run a **single** `tokio` 0.1 [`Reactor`][reactor-01] and
 //!   [`Timer`][timer-01] on a background thread, for legacy tasks.
 //!
@@ -100,12 +99,11 @@
 //!
 //! [`tokio::runtime`]: https://docs.rs/tokio/0.2.0-alpha.6/tokio/runtime/index.html
 //! [futures-compat]: https://rust-lang-nursery.github.io/futures-api-docs/0.3.0-alpha.19/futures/compat/index.html
-//! [`Timer`]: https://docs.rs/tokio/0.2.0-alpha.6/tokio/timer/index.html
 //! [`Runtime`]: struct.Runtime.html
-//! [`Reactor`]:https://docs.rs/tokio/0.2.0-alpha.6/tokio/reactor/struct.Reactor.html
+//! [resource drivers]: https://docs.rs/tokio/0.2.4/tokio/runtime/index.html#resource-drivers
+//! [thread pool]: https://docs.rs/tokio/0.2.4/tokio/runtime/index.html#threaded-scheduler
 //! [timer-01]: https://docs.rs/tokio/0.1.22/tokio/timer/index.html
 //! [reactor-01]: https://docs.rs/tokio/0.1.22/tokio/reactor/struct.Reactor.html
-//! [`ThreadPool`]: https://docs.rs/tokio-executor/0.2.0-alpha.2/tokio_executor/threadpool/struct.ThreadPool.html
 //! [`run`]: struct.Runtime.html#method.run
 //! [`spawn`]: struct.Runtime.html#method.spawn
 //! [`block_on`]: struct.Runtime.html#method.block_on
