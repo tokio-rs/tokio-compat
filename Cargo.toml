@@ -8,19 +8,19 @@ name = "tokio-compat"
 #   - README.md
 # - Update CHANGELOG.md.
 # - Create "v0.1.x" git tag.
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 edition = "2018"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 license = "MIT"
 readme = "README.md"
-documentation = "https://docs.rs/tokio-compat/0.1.0-alpha.1/tokio-compat/"
+documentation = "https://docs.rs/tokio-compat/0.1.0/tokio-compat/"
 repository = "https://github.com/tokio-rs/tokio-compat"
 homepage = "https://tokio.rs"
 description = """
 Compatibility between `tokio` 0.2 and legacy versions.
 """
 categories = ["asynchronous", "network-programming"]
-keywords = ["io", "async", "non-blocking", "futures"]
+keywords = ["io", "async", "non-blocking", "futures", "tokio"]
 
 [features]
 default = ["blocking", "rt-full", "sink"]
