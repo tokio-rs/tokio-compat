@@ -1,13 +1,12 @@
-use tokio_executor_01::{self as executor_01, park as park_01};
+use futures_01::{future::Future as Future01, sync::oneshot};
+use futures_util::{compat::Future01CompatExt, future::FutureExt};
+use std::{cell::RefCell, io, thread};
+use tokio_02::runtime::Handle;
+use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
 use tokio_timer_02::{clock as clock_02, timer as timer_02};
 
-use std::{
-    io, thread,
-    time::{Duration, Instant},
-};
-use tokio_02::executor::{current_thread::CurrentThread, park};
-use tokio_02::sync::oneshot;
+use super::idle;
 
 #[derive(Debug)]
 pub(super) struct Background {
@@ -17,27 +16,61 @@ pub(super) struct Background {
     thread: Option<thread::JoinHandle<()>>,
 }
 
-#[derive(Debug)]
-pub(super) struct Now<N>(N);
+#[derive(Clone, Debug)]
+pub(super) struct CompatSpawner<S> {
+    pub(super) inner: S,
+    pub(super) idle: idle::Idle,
+}
 
-#[derive(Debug)]
-struct CompatPark<P>(P);
+struct CompatGuards {
+    _executor: executor_01::DefaultGuard,
+    _timer: timer_02::DefaultGuard,
+    _reactor: reactor_01::DefaultGuard,
+}
+
+thread_local! {
+    static COMPAT_GUARDS: RefCell<Option<CompatGuards>> = RefCell::new(None);
+}
+
+pub(super) fn set_guards(
+    executor: impl executor_01::Executor + 'static,
+    timer: &timer_02::Handle,
+    reactor: &reactor_01::Handle,
+) {
+    let guards = CompatGuards {
+        _executor: executor_01::set_default(executor),
+        _timer: timer_02::set_default(timer),
+        _reactor: reactor_01::set_default(reactor),
+    };
+
+    COMPAT_GUARDS.with(move |current| {
+        let prev = current.borrow_mut().replace(guards);
+        assert!(
+            prev.is_none(),
+            "default tokio 0.1 runtime set twice; this is a bug"
+        );
+    });
+}
+
+pub(super) fn unset_guards() {
+    let _ = COMPAT_GUARDS.try_with(move |current| {
+        drop(current.borrow_mut().take());
+    });
+}
 
 impl Background {
-    pub(super) fn spawn(clock: &tokio_02::timer::clock::Clock) -> io::Result<Self> {
-        let clock = clock_02::Clock::new_with_now(Now(clock.clone()));
-
+    pub(super) fn spawn(clock: &clock_02::Clock) -> io::Result<Self> {
         let reactor = reactor_01::Reactor::new()?;
         let reactor_handle = reactor.handle();
 
-        let timer = timer_02::Timer::new_with_now(reactor, clock);
+        let timer = timer_02::Timer::new_with_now(reactor, clock.clone());
         let timer_handle = timer.handle();
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let shutdown_tx = Some(shutdown_tx);
 
         let thread = thread::spawn(move || {
-            let mut rt = CurrentThread::new_with_park(CompatPark(timer));
+            let mut rt = tokio_current_thread_01::CurrentThread::new_with_park(timer);
             let _ = rt.block_on(shutdown_rx);
         });
         let thread = Some(thread);
@@ -66,48 +99,67 @@ impl Drop for Background {
     }
 }
 
-pub(super) fn spawn_err(new: tokio_02::executor::SpawnError) -> executor_01::SpawnError {
-    match new {
-        _ if new.is_shutdown() => executor_01::SpawnError::shutdown(),
-        _ if new.is_at_capacity() => executor_01::SpawnError::at_capacity(),
-        e => unreachable!("weird spawn error {:?}", e),
+// === impl CompatSpawner ===
+
+impl<T> CompatSpawner<T> {
+    pub(super) fn new(inner: T, idle: &idle::Idle) -> Self {
+        Self {
+            inner,
+            idle: idle.clone(),
+        }
     }
 }
 
-impl<P> park::Park for CompatPark<P>
+impl<'a> executor_01::Executor for CompatSpawner<&'a Handle> {
+    fn spawn(
+        &mut self,
+        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
+    ) -> Result<(), executor_01::SpawnError> {
+        let future = future.compat().map(|_| ());
+        let idle = self.idle.reserve();
+        self.inner.spawn(idle.with(future));
+        Ok(())
+    }
+}
+
+impl<'a, T> executor_01::TypedExecutor<T> for CompatSpawner<&'a Handle>
 where
-    P: park_01::Park,
+    T: Future01<Item = (), Error = ()> + Send + 'static,
 {
-    type Unpark = CompatPark<P::Unpark>;
-    type Error = P::Error;
-
-    fn unpark(&self) -> Self::Unpark {
-        CompatPark(self.0.unpark())
-    }
-
-    #[inline]
-    fn park(&mut self) -> Result<(), Self::Error> {
-        self.0.park()
-    }
-
-    #[inline]
-    fn park_timeout(&mut self, duration: Duration) -> Result<(), Self::Error> {
-        self.0.park_timeout(duration)
+    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
+        let idle = self.idle.reserve();
+        let future = Box::pin(idle.with(future.compat().map(|_| ())));
+        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
+        // future twice (once to spawn it using `Executor01::spawn` and a second
+        // time to pin the compat future).
+        self.inner.spawn(future);
+        Ok(())
     }
 }
 
-impl<U> park::Unpark for CompatPark<U>
+impl executor_01::Executor for CompatSpawner<Handle> {
+    fn spawn(
+        &mut self,
+        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
+    ) -> Result<(), executor_01::SpawnError> {
+        let future = future.compat().map(|_| ());
+        let idle = self.idle.reserve();
+        self.inner.spawn(idle.with(future));
+        Ok(())
+    }
+}
+
+impl<T> executor_01::TypedExecutor<T> for CompatSpawner<Handle>
 where
-    U: park_01::Unpark,
+    T: Future01<Item = (), Error = ()> + Send + 'static,
 {
-    #[inline]
-    fn unpark(&self) {
-        self.0.unpark()
-    }
-}
-
-impl clock_02::Now for Now<tokio_02::timer::clock::Clock> {
-    fn now(&self) -> Instant {
-        self.0.now()
+    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
+        let idle = self.idle.reserve();
+        let future = Box::pin(idle.with(future.compat().map(|_| ())));
+        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
+        // future twice (once to spawn it using `Executor01::spawn` and a second
+        // time to pin the compat future).
+        self.inner.spawn(future);
+        Ok(())
     }
 }

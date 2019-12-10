@@ -1,16 +1,11 @@
-use super::{background, compat, Inner, Runtime};
+use super::{compat, Inner, Runtime};
 
-use tokio_02::executor::thread_pool;
-use tokio_02::net::driver::{self, Reactor};
-use tokio_02::timer::clock::{self, Clock};
-use tokio_02::timer::timer::{self, Timer};
-use tokio_executor_01 as executor_01;
-use tokio_reactor_01 as reactor_01;
-use tokio_timer_02 as timer_02;
-
-use num_cpus;
-use std::io;
-use std::sync::{Arc, Barrier, Mutex, RwLock};
+use std::{
+    io,
+    sync::{Arc, RwLock},
+};
+use tokio_02::runtime;
+use tokio_timer_02::clock as clock_02;
 
 /// Builds a compatibility runtime with custom configuration values.
 ///
@@ -33,7 +28,7 @@ use std::sync::{Arc, Barrier, Mutex, RwLock};
 /// ```
 ///
 /// use tokio_compat::runtime::Builder;
-/// use tokio_02::timer::clock::Clock;
+/// use tokio_timer_02::clock::Clock;
 ///
 /// fn main() {
 ///     // build Runtime
@@ -50,14 +45,8 @@ use std::sync::{Arc, Barrier, Mutex, RwLock};
 /// ```
 #[derive(Debug)]
 pub struct Builder {
-    /// Thread pool specific builder
-    threadpool_builder: thread_pool::Builder,
-
-    /// The number of worker threads
-    core_threads: usize,
-
-    /// The clock to use
-    clock: Clock,
+    inner: runtime::Builder,
+    clock: clock_02::Clock,
 }
 
 impl Builder {
@@ -66,21 +55,14 @@ impl Builder {
     ///
     /// Configuration methods can be chained on the return value.
     pub fn new() -> Builder {
-        let core_threads = num_cpus::get().max(1);
-
-        let mut threadpool_builder = thread_pool::Builder::new();
-        threadpool_builder.name("tokio-runtime-worker");
-        threadpool_builder.num_threads(core_threads);
-
         Builder {
-            threadpool_builder,
-            core_threads,
-            clock: Clock::new(),
+            clock: clock_02::Clock::system(),
+            inner: runtime::Builder::new(),
         }
     }
 
-    /// Set the `Clock` instance that will be used by the runtime.
-    pub fn clock(&mut self, clock: Clock) -> &mut Self {
+    /// Set the `Clock` instance that will be used by the runtime's legacy timer.
+    pub fn clock(&mut self, clock: clock_02::Clock) -> &mut Self {
         self.clock = clock;
         self
     }
@@ -105,8 +87,7 @@ impl Builder {
     /// # }
     /// ```
     pub fn core_threads(&mut self, val: usize) -> &mut Self {
-        self.core_threads = val;
-        self.threadpool_builder.num_threads(val);
+        self.inner.num_threads(val);
         self
     }
 
@@ -130,7 +111,7 @@ impl Builder {
     /// # }
     /// ```
     pub fn name_prefix<S: Into<String>>(&mut self, val: S) -> &mut Self {
-        self.threadpool_builder.name(val);
+        self.inner.thread_name(val);
         self
     }
 
@@ -154,7 +135,7 @@ impl Builder {
     /// # }
     /// ```
     pub fn stack_size(&mut self, val: usize) -> &mut Self {
-        self.threadpool_builder.stack_size(val);
+        self.inner.thread_stack_size(val);
         self
     }
 
@@ -173,108 +154,42 @@ impl Builder {
     /// # }
     /// ```
     pub fn build(&mut self) -> io::Result<Runtime> {
-        self.threadpool_builder.num_threads(self.core_threads);
-
-        let mut reactor_handles = Vec::new();
-        let mut timer_handles = Vec::new();
-        let mut timers = Vec::new();
-
-        for _ in 0..self.core_threads {
-            // Create a new reactor.
-            let reactor = Reactor::new()?;
-            reactor_handles.push(reactor.handle());
-
-            // Create a new timer.
-            let timer = Timer::new_with_clock(reactor, self.clock.clone());
-            timer_handles.push(timer.handle());
-            timers.push(Mutex::new(Some(timer)));
-        }
-
-        // Get a handle to the clock for the runtime.
-        let clock = self.clock.clone();
-
-        // Get the current trace dispatcher.
-        let dispatch = tracing_core::dispatcher::get_default(tracing_core::Dispatch::clone);
-        let trace = dispatch.clone();
-
-        let background = background::spawn(&clock)?;
-        let compat_bg = compat::Background::spawn(&clock)?;
-        let compat_reactor = compat_bg.reactor().clone();
+        let compat_bg = compat::Background::spawn(&self.clock)?;
         let compat_timer = compat_bg.timer().clone();
+        let compat_reactor = compat_bg.reactor().clone();
+        let compat_sender: Arc<RwLock<Option<super::CompatSpawner<tokio_02::runtime::Handle>>>> =
+            Arc::new(RwLock::new(None));
+        let compat_sender2 = compat_sender.clone();
+        let mut lock = compat_sender.write().unwrap();
 
-        // The `tokio` 0.2 default executor for the worker threads will be set
-        // by the threadpool itself, but in order to set a default executor for
-        // `tokio-executor` 0.1 compatibility, we need a `Sender` for the pool
-        // in the `around_worker` closure.
-        //
-        // Unfortunately, we can't get a sender until the pool is constructed,
-        // which requires the `around_worker` closure. As a workaround, we can
-        // an `Arc<RwLock>`, which can be moved into the closure, and then be
-        // set once the pool is constructed. Since the closures won't _run_
-        // until we actually try to run futures on the pool, it's okay to set
-        // the sender after constructing the pool.
-        //
-        // The lock is only acquired in `around_worker`; once it is acquired the
-        // sender is cloned, and the lock doesn't need to be acquired to spawn a
-        // future. Since we only use it when creating the pool, there shouldn't
-        // be much of a performance impact.
-        let sender_lock = Arc::new(RwLock::new(None));
-        let mut compat_sender = sender_lock
-            .write()
-            .expect("lock has not been accessed, it cannot have been poisoned");
-        let compat_sender2 = sender_lock.clone();
-
-        let pool = self
-            .threadpool_builder
-            .around_worker(move |index, work| {
-                let mut enter = executor_01::enter().unwrap();
+        let runtime = self
+            .inner
+            .threaded_scheduler()
+            .enable_all()
+            .on_thread_start(move || {
                 // We need the threadpool's sender to set up the default tokio
                 // 0.1 executor.
-                let sender_lock = compat_sender2.clone();
-                let mut compat_sender = sender_lock
-                    .read()
-                    .unwrap()
-                    .clone()
-                    .expect("compat executor needs to be set before the pool is run!");
-
-                // Set the default tokio 0.1 reactor to the background compat reactor.
-                reactor_01::with_default(&compat_reactor, &mut enter, |enter| {
-                    // Set the default tokio 0.2 reactor to this worker thread's
-                    // reactor.
-                    let _reactor = driver::set_default(&reactor_handles[index]);
-                    clock::with_default(&clock, || {
-                        // Set up a default timer for tokio 0.1 compat.
-                        timer_02::with_default(&compat_timer, enter, |enter| {
-                            let _timer = timer::set_default(&timer_handles[index]);
-                            tracing_core::dispatcher::with_default(&dispatch, || {
-                                // Set the default executor for tokio 0.1 compat.
-                                executor_01::with_default(&mut compat_sender, enter, |_enter| {
-                                    work();
-                                })
-                            })
-                        })
-                    })
-                });
+                let lock = compat_sender2.read().unwrap();
+                let compat_sender = lock
+                    .as_ref()
+                    .expect("compat executor needs to be set before the pool is run!")
+                    .clone();
+                compat::set_guards(compat_sender, &compat_timer, &compat_reactor);
             })
-            .build_with_park(move |index| timers[index].lock().unwrap().take().unwrap());
+            .on_thread_stop(|| {
+                compat::unset_guards();
+            })
+            .build()?;
 
         let (idle, idle_rx) = super::idle::Idle::new();
+        // Set the tokio 0.1 executor to be used by the worker threads.
+        *lock = Some(super::CompatSpawner::new(runtime.handle().clone(), &idle));
+        drop(lock);
         let runtime = Runtime {
-            inner: Some(Inner {
-                pool,
-                background,
-                compat_bg,
-                trace,
-            }),
+            inner: Some(Inner { runtime, compat_bg }),
             idle_rx,
             idle,
         };
-
-        // Set the tokio 0.1 executor to be used by the worker threads.
-        *compat_sender = Some(runtime.spawner());
-        // Releasing the write lock allows the workers to unblock and access the
-        // sender.
-        drop(compat_sender);
 
         Ok(runtime)
     }

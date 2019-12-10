@@ -1,25 +1,27 @@
-mod background;
 mod builder;
-mod idle;
 mod task_executor;
 
 #[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
-pub use builder::Builder;
+pub use self::task_executor::TaskExecutor;
 #[allow(unreachable_pub)] // https://github.com/rust-lang/rust/issues/57411
-pub use task_executor::TaskExecutor;
+pub use builder::Builder;
 
-use super::compat;
-use background::Background;
+use super::{
+    compat::{self, CompatSpawner},
+    idle,
+};
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
-use std::{future::Future, io, pin::Pin};
-use tokio_02::executor::enter;
-use tokio_02::executor::thread_pool::{Spawner, ThreadPool};
-use tokio_02::net::driver;
-use tokio_02::timer::timer;
+use std::{future::Future, io};
+use tokio_02::{
+    runtime::{self, Handle},
+    sync::oneshot,
+    task::JoinHandle,
+};
 use tokio_executor_01 as executor_01;
 use tokio_reactor_01 as reactor_01;
+
 use tokio_timer_02 as timer_02;
 
 /// A thread pool runtime that can run tasks that use both `tokio` 0.1 and
@@ -31,41 +33,37 @@ use tokio_timer_02 as timer_02;
 /// runtime services. and `futures` 0.1 tasks that use `tokio` 0.1 runtime
 /// services.
 ///
-/// [rt]: https://docs.rs/tokio/0.2.0-alpha.6/tokio/runtime/struct.Runtime.html
+/// [rt]: https://docs.rs/tokio/0.2.4/tokio/runtime/struct.Runtime.html
 #[derive(Debug)]
 pub struct Runtime {
+    /// The actual runtime. This is in an option so that it can be dropped when
+    /// shutting down.
     inner: Option<Inner>,
+
+    /// Idleness tracking.
     idle: idle::Idle,
-    idle_rx: tokio_02::sync::mpsc::Receiver<()>,
+    idle_rx: idle::Rx,
+}
+
+pin_project_lite::pin_project! {
+
+    /// A future that resolves when the Tokio `Runtime` is shut down.
+    #[derive(Debug)]
+    pub struct Shutdown {
+        #[pin]
+        inner: oneshot::Receiver<()>,
+    }
 }
 
 #[derive(Debug)]
 struct Inner {
-    /// Task execution pool.
-    pool: ThreadPool,
-
-    /// Tracing dispatcher
-    trace: tracing_core::Dispatch,
-
-    /// Maintains a reactor and timer that are always running on a background
-    /// thread. This is to support `runtime.block_on` w/o requiring the future
-    /// to be `Send`.
-    ///
-    /// A dedicated background thread is required as the threadpool threads
-    /// might not be running. However, this is a temporary work around.
-    background: Background,
+    runtime: runtime::Runtime,
 
     /// Compatibility background thread.
     ///
     /// This maintains a `tokio` 0.1 timer and reactor to support running
     /// futures that use older tokio APIs.
     compat_bg: compat::Background,
-}
-
-#[derive(Clone, Debug)]
-struct CompatSpawner<S> {
-    inner: S,
-    idle: idle::Idle,
 }
 
 // ===== impl Runtime =====
@@ -118,7 +116,9 @@ pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()> + Send + 'static,
 {
-    run_std(future.compat().map(|_| ()))
+    let runtime = Runtime::new().expect("failed to start new Runtime");
+    runtime.spawn(future);
+    runtime.shutdown_on_idle();
 }
 
 /// Start the Tokio runtime using the supplied `std::future` future to bootstrap
@@ -169,9 +169,8 @@ pub fn run_std<F>(future: F)
 where
     F: Future<Output = ()> + Send + 'static,
 {
-    // Check enter before creating a new Runtime...
-    let runtime = Runtime::new().expect("failed to start new Runtime");
-    runtime.spawn_std(future);
+    let mut runtime = Runtime::new().expect("failed to start new Runtime");
+    runtime.block_on_std(future);
     runtime.shutdown_on_idle();
 }
 
@@ -304,8 +303,97 @@ impl Runtime {
         F: Future<Output = ()> + Send + 'static,
     {
         let idle = self.idle.reserve();
-        self.inner().pool.spawn(idle.with(future));
+        self.inner().runtime.spawn(idle.with(future));
         self
+    }
+
+    /// Spawn a `futures` 0.1 future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// `shutdown_on_idle`, since they are paired with a `JoinHandle` for
+    /// awaiting their completion. See [here] for details on shutting down
+    /// the compatibility runtime.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    /// [here]: index.html#shutting-down
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `futures` 0.1 future onto the runtime
+    /// executor.spawn(futures_01::future::lazy(|| {
+    ///     println!("now running on a worker thread");
+    ///     Ok(())
+    /// }));
+    /// # }
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the spawn fails. Failure occurs if the executor
+    /// is currently at capacity and is unable to spawn a new future.
+    pub fn spawn_handle<F>(&self, future: F) -> JoinHandle<Result<F::Item, F::Error>>
+    where
+        F: Future01 + Send + 'static,
+        F::Item: Send + 'static,
+        F::Error: Send + 'static,
+    {
+        let future = Box::pin(future.compat());
+        self.spawn_handle_std(future)
+    }
+
+    /// Spawn a `std::future` future onto the Tokio runtime, returning a
+    /// `JoinHandle` that can be used to await its result.
+    ///
+    /// This spawns the given future onto the runtime's executor, usually a
+    /// thread pool. The thread pool is then responsible for polling the future
+    /// until it completes.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// `shutdown_on_idle`, since they are paired with a `JoinHandle` for
+    /// awaiting their completion. See [here] for details on shutting down
+    /// the compatibility runtime.
+    ///
+    /// See [module level][mod] documentation for more details.
+    ///
+    /// [mod]: index.html
+    /// [here]: index.html#shutting-down
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio_compat::runtime::Runtime;
+    ///
+    /// # fn dox() {
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
+    /// let executor = rt.executor();
+    ///
+    /// // Spawn a `std::future` future onto the runtime
+    /// executor.spawn_std(async {
+    ///     println!("now running on a worker thread");
+    /// });
+    /// # }
+    /// ```
+    pub fn spawn_handle_std<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.inner().runtime.spawn(future)
     }
 
     /// Run a `futures` 0.1 future to completion on the Tokio runtime.
@@ -320,7 +408,7 @@ impl Runtime {
     ///
     /// This function panics if the executor is at capacity, if the provided
     /// future panics, or if called within an asynchronous execution context.
-    pub fn block_on<F>(&self, future: F) -> Result<F::Item, F::Error>
+    pub fn block_on<F>(&mut self, future: F) -> Result<F::Item, F::Error>
     where
         F: Future01,
     {
@@ -339,44 +427,18 @@ impl Runtime {
     ///
     /// This function panics if the executor is at capacity, if the provided
     /// future panics, or if called within an asynchronous execution context.
-    pub fn block_on_std<F>(&self, future: F) -> F::Output
+    pub fn block_on_std<F>(&mut self, future: F) -> F::Output
     where
         F: Future,
     {
-        let mut entered = enter().expect("nested block_on");
-        let mut old_entered = executor_01::enter().expect("nested block_on");
-        let bg = &self.inner().background;
-        let trace = &self.inner().trace;
-        let compat = &self.inner().compat_bg;
-
-        tokio_02::executor::with_default(&mut self.spawner_ref(), || {
-            executor_01::with_default(
-                &mut self.spawner_ref(),
-                &mut old_entered,
-                |mut old_entered| {
-                    let _reactor = driver::set_default(bg.reactor());
-                    let _timer = timer::set_default(bg.timer());
-                    // Set up a default timer for tokio 0.1 compat.
-                    reactor_01::with_default(
-                        compat.reactor(),
-                        &mut old_entered,
-                        |mut old_entered| {
-                            // Set the default tokio 0.2 reactor to this worker thread's
-                            // reactor.
-                            timer_02::with_default(
-                                compat.timer(),
-                                &mut old_entered,
-                                |_old_entered| {
-                                    tracing_core::dispatcher::with_default(trace, || {
-                                        entered.block_on(future)
-                                    })
-                                },
-                            )
-                        },
-                    )
-                },
-            )
-        })
+        let idle = self.idle.reserve();
+        let spawner = self.spawner();
+        let inner = self.inner_mut();
+        let compat = &inner.compat_bg;
+        let _timer = timer_02::timer::set_default(compat.timer());
+        let _reactor = reactor_01::set_default(compat.reactor());
+        let _executor = executor_01::set_default(spawner);
+        inner.runtime.block_on(idle.with(future))
     }
 
     /// Signals the runtime to shutdown once it becomes idle.
@@ -391,6 +453,11 @@ impl Runtime {
     /// * The reactor is not managing any I/O resources.
     ///
     /// See [module level][mod] documentation for more details.
+    ///
+    /// **Note**: tasks spawned with associated [`JoinHandle`]s do _not_ "count"
+    /// towards `shutdown_on_idle`. Since `shutdown_on_idle` does not exist in
+    /// `tokio` 0.2, this is intended as a _transitional_ API; its use should be
+    /// phased out in favor of waiting on `JoinHandle`s.
     ///
     /// # Examples
     ///
@@ -408,11 +475,21 @@ impl Runtime {
     /// ```
     ///
     /// [mod]: index.html
-    pub fn shutdown_on_idle(mut self) {
-        use futures_util::stream::StreamExt;
-        let mut e = tokio_02::executor::enter().unwrap();
-
-        e.block_on(self.idle_rx.next());
+    /// [`JoinHandle`]: https://docs.rs/tokio/latest/tokio/task/struct.JoinHandle.html
+    pub fn shutdown_on_idle(mut self) -> Shutdown {
+        let spawner = self.spawner();
+        let Inner {
+            compat_bg,
+            mut runtime,
+        } = self.inner.take().expect("runtime is only shut down once");
+        let _timer = timer_02::timer::set_default(compat_bg.timer());
+        let _reactor = reactor_01::set_default(compat_bg.reactor());
+        let _executor = executor_01::set_default(spawner);
+        let idle = &mut self.idle_rx;
+        let (tx, rx) = oneshot::channel();
+        runtime.block_on(idle.recv());
+        tx.send(()).unwrap();
+        Shutdown { inner: rx }
     }
 
     /// Signals the runtime to shutdown immediately.
@@ -448,21 +525,17 @@ impl Runtime {
     /// ```
     ///
     /// [mod]: index.html
-    #[allow(warnings)]
-    pub fn shutdown_now(mut self) {
-        self.inner.take().unwrap().pool.shutdown_now();
+    pub fn shutdown_now(mut self) -> Shutdown {
+        let (tx, rx) = oneshot::channel();
+        tx.send(()).unwrap();
+        drop(self.inner.take().unwrap());
+
+        Shutdown { inner: rx }
     }
 
-    fn spawner(&self) -> CompatSpawner<Spawner> {
+    fn spawner(&self) -> CompatSpawner<Handle> {
         CompatSpawner {
-            inner: self.inner().pool.spawner().clone(),
-            idle: self.idle.clone(),
-        }
-    }
-
-    fn spawner_ref(&self) -> CompatSpawner<&'_ Spawner> {
-        CompatSpawner {
-            inner: self.inner().pool.spawner(),
+            inner: self.inner().runtime.handle().clone(),
             idle: self.idle.clone(),
         }
     }
@@ -470,66 +543,9 @@ impl Runtime {
     fn inner(&self) -> &Inner {
         self.inner.as_ref().unwrap()
     }
-}
 
-impl tokio_02::executor::Executor for CompatSpawner<&'_ Spawner> {
-    fn spawn(
-        &mut self,
-        future: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> Result<(), tokio_02::executor::SpawnError> {
-        let idle = self.idle.reserve();
-        self.inner.spawn(idle.with(future));
-        Ok(())
-    }
-}
-
-impl executor_01::Executor for CompatSpawner<&'_ Spawner> {
-    fn spawn(
-        &mut self,
-        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
-    ) -> Result<(), executor_01::SpawnError> {
-        let future = future.compat().map(|_| ());
-        let idle = self.idle.reserve();
-        self.inner.spawn(idle.with(future));
-        Ok(())
-    }
-}
-
-impl tokio_02::executor::Executor for CompatSpawner<Spawner> {
-    fn spawn(
-        &mut self,
-        future: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> Result<(), tokio_02::executor::SpawnError> {
-        let idle = self.idle.reserve();
-        self.inner.spawn(idle.with(future));
-        Ok(())
-    }
-}
-
-impl executor_01::Executor for CompatSpawner<Spawner> {
-    fn spawn(
-        &mut self,
-        future: Box<dyn futures_01::Future<Item = (), Error = ()> + Send>,
-    ) -> Result<(), executor_01::SpawnError> {
-        let future = future.compat().map(|_| ());
-        let idle = self.idle.reserve();
-        self.inner.spawn(idle.with(future));
-        Ok(())
-    }
-}
-
-impl<T> executor_01::TypedExecutor<T> for CompatSpawner<Spawner>
-where
-    T: Future01<Item = (), Error = ()> + Send + 'static,
-{
-    fn spawn(&mut self, future: T) -> Result<(), executor_01::SpawnError> {
-        let idle = self.idle.reserve();
-        let future = Box::pin(idle.with(future.compat().map(|_| ())));
-        // Use the `tokio` 0.2 `TypedExecutor` impl so we don't have to box the
-        // future twice (once to spawn it using `Executor01::spawn` and a second
-        // time to pin the compat future).
-        self.inner.spawn(future);
-        Ok(())
+    fn inner_mut(&mut self) -> &mut Inner {
+        self.inner.as_mut().unwrap()
     }
 }
 
@@ -541,5 +557,12 @@ impl Drop for Runtime {
     }
 }
 
-#[cfg(test)]
-mod tests;
+impl std::future::Future for Shutdown {
+    type Output = ();
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        self.project().inner.poll(cx).map(|_| ())
+    }
+}

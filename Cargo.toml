@@ -22,24 +22,29 @@ Compatibility between `tokio` 0.2 and legacy versions.
 categories = ["asynchronous", "network-programming"]
 keywords = ["io", "async", "non-blocking", "futures"]
 
-
 [features]
-default = ["rt-full", "sink"]
+default = ["blocking", "rt-full", "sink"]
+blocking = [
+    "rt-current-thread",
+    "tokio-02/blocking",
+]
 # enables the compat runtimes.
 rt-current-thread = [
     "tokio-timer-02",
     "tokio-reactor-01",
     "tokio-executor-01",
-    "tokio-02/rt-current-thread",
-    "tokio-02/timer",
+    "tokio-current-thread-01",
+    "tokio-02/rt-core",
+    "tokio-02/rt-util",
+    "tokio-02/time",
     "tokio-02/sync",
-    "tokio-02/net-driver",
+    "tokio-02/stream",
+    "tokio-02/io-driver",
 ]
 rt-full = [
-    "tracing-core",
-    "num_cpus",
-    "tokio-02/rt-full",
+    "tokio-02/rt-threaded",
     "rt-current-thread",
+    "pin-project-lite"
 ]
 sink = ["futures-util/sink"]
 
@@ -47,14 +52,14 @@ sink = ["futures-util/sink"]
 futures-01 = { package = "futures", version = "0.1" }
 futures-03-core = { package = "futures-core-preview", version = "0.3.0-alpha.19" }
 futures-util = { package = "futures-util-preview", version = "0.3.0-alpha.19", default-features = false, features = ["compat"] }
-tokio-02 = { package = "tokio", git = "https://github.com/tokio-rs/tokio", rev ="e699d4653", default_features = false }
+tokio-02 = { package = "tokio", version = "0.2.4", default-features = false }
+pin-project-lite = { version = "0.1", optional = true }
 
 # runtime-only
-tokio-timer-02 = { package = "tokio-timer", version = "0.2", optional = true}
-tokio-reactor-01 = { package = "tokio-reactor", version = "0.1", optional = true }
-tokio-executor-01 = { package = "tokio-executor", version = "0.1", optional = true }
-num_cpus =  { version = "1", optional = true }
-tracing-core = { version = "0.1", optional = true }
+tokio-timer-02 = { package = "tokio-timer", version = "0.2.12", optional = true }
+tokio-reactor-01 = { package = "tokio-reactor", version = "0.1.11", optional = true  }
+tokio-executor-01 = { package = "tokio-executor", version = "0.1.9", optional = true }
+tokio-current-thread-01 = { package = "tokio-current-thread", version = "0.1", optional = true }
 
 [dev-dependencies]
 tokio-01 = { package = "tokio", version = "0.1" }

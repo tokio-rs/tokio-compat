@@ -67,14 +67,14 @@
 //! [rt]: struct.Runtime.html
 //! [concurrent-rt]: ../struct.Runtime.html
 //! [default-rt]:
-//!     https://docs.rs/tokio/0.2.0-alpha.6/tokio/runtime/current_thread/struct.Runtime.html
+//!     https://docs.rs/tokio/0.2.4/tokio/runtime/current_thread/struct.Runtime.html
 //! [chan]: https://docs.rs/futures/0.1/futures/sync/mpsc/fn.channel.html
 //! [reactor]: ../../reactor/struct.Reactor.html
 //! [executor]: https://tokio.rs/docs/internals/runtime-model/#executors
 //! [timer]: ../../timer/index.html
 //! [timer-01]: https://docs.rs/tokio/0.1.22/tokio/timer/index.html
 //! [reactor-01]: https://docs.rs/tokio/0.1.22/tokio/reactor/struct.Reactor.html
-use super::compat;
+use super::{compat, idle};
 
 mod builder;
 mod runtime;
@@ -85,7 +85,7 @@ pub use self::runtime::{Handle, RunError, Runtime};
 pub use self::task_executor::TaskExecutor;
 
 use futures_01::future::Future as Future01;
-use futures_util::{compat::Future01CompatExt, FutureExt};
+use futures_util::compat::Future01CompatExt;
 use std::future::Future;
 
 /// Run the provided `futures` 0.1 future to completion using a runtime running on the current thread.
@@ -95,7 +95,7 @@ use std::future::Future;
 /// [`Runtime::run`] to wait for any other spawned futures to resolve.
 pub fn block_on_all<F>(future: F) -> Result<F::Item, F::Error>
 where
-    F: Future01,
+    F: Future01 + 'static,
 {
     block_on_all_std(future.compat())
 }
@@ -107,7 +107,7 @@ where
 /// [`Runtime::run`] to wait for any other spawned futures to resolve.
 pub fn block_on_all_std<F>(future: F) -> F::Output
 where
-    F: Future,
+    F: Future + 'static,
 {
     let mut r = Runtime::new().expect("failed to start runtime on current thread");
     let v = r.block_on_std(future);
@@ -124,7 +124,9 @@ pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()> + 'static,
 {
-    run_std(future.compat().map(|_| ()))
+    let mut r = Runtime::new().expect("failed to start runtime on current thread");
+    r.spawn(future);
+    r.run().expect("failed to resolve remaining futures");
 }
 
 /// Start a current-thread runtime using the supplied `std::future` ture to bootstrap execution.
@@ -137,9 +139,7 @@ where
     F: Future<Output = ()> + 'static,
 {
     let mut r = Runtime::new().expect("failed to start runtime on current thread");
-    r.spawn_std(future);
+    let v = r.block_on_std(future);
     r.run().expect("failed to resolve remaining futures");
+    v
 }
-
-#[cfg(test)]
-mod tests;

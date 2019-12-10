@@ -6,15 +6,15 @@ use std::time::{Duration, Instant};
 
 use futures_01::future::Future as Future01;
 use futures_util::compat::Future01CompatExt;
+use tokio_compat::runtime;
 
 #[test]
 fn can_run_01_futures() {
     let future_ran = Arc::new(AtomicBool::new(false));
     let ran = future_ran.clone();
-
-    super::run(futures_01::future::lazy(move || {
+    runtime::run(futures_01::future::lazy(move || {
         future_ran.store(true, Ordering::SeqCst);
-        Ok::<(), ()>(())
+        Ok(())
     }));
     assert!(ran.load(Ordering::SeqCst));
 }
@@ -23,7 +23,7 @@ fn can_run_01_futures() {
 fn can_spawn_01_futures() {
     let future_ran = Arc::new(AtomicBool::new(false));
     let ran = future_ran.clone();
-    super::run(futures_01::future::lazy(move || {
+    runtime::run(futures_01::future::lazy(move || {
         tokio_01::spawn(futures_01::future::lazy(move || {
             future_ran.store(true, Ordering::SeqCst);
             Ok(())
@@ -37,7 +37,7 @@ fn can_spawn_01_futures() {
 fn can_spawn_std_futures() {
     let future_ran = Arc::new(AtomicBool::new(false));
     let ran = future_ran.clone();
-    super::run(futures_01::future::lazy(move || {
+    runtime::run(futures_01::future::lazy(move || {
         tokio_02::spawn(async move {
             future_ran.store(true, Ordering::SeqCst);
         });
@@ -69,7 +69,7 @@ fn tokio_01_timers_work() {
         assert!(Instant::now() >= when);
     };
 
-    super::run(futures_01::future::lazy(move || {
+    runtime::run(futures_01::future::lazy(move || {
         tokio_02::spawn(future2);
         tokio_01::spawn(future1);
         Ok(())
@@ -80,7 +80,7 @@ fn tokio_01_timers_work() {
 
 #[test]
 fn block_on_01_timer() {
-    let mut rt = super::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
     let when = Instant::now() + Duration::from_millis(10);
     rt.block_on(tokio_01::timer::Delay::new(when)).unwrap();
     assert!(Instant::now() >= when);
@@ -88,7 +88,7 @@ fn block_on_01_timer() {
 
 #[test]
 fn block_on_std_01_timer() {
-    let mut rt = super::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
     let when = Instant::now() + Duration::from_millis(10);
     rt.block_on_std(async move {
         tokio_01::timer::Delay::new(when).compat().await.unwrap();
@@ -98,7 +98,7 @@ fn block_on_std_01_timer() {
 
 #[test]
 fn block_on_01_spawn() {
-    let mut rt = super::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
     // other tests assert that spawned 0.1 tasks actually *run*, all we care
     // is that we're able to spawn it successfully.
     rt.block_on(futures_01::future::lazy(|| {
@@ -109,8 +109,40 @@ fn block_on_01_spawn() {
 
 #[test]
 fn block_on_std_01_spawn() {
-    let mut rt = super::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
     // other tests assert that spawned 0.1 tasks actually *run*, all we care
     // is that we're able to spawn it successfully.
     rt.block_on_std(async { tokio_01::spawn(futures_01::future::lazy(|| Ok(()))) });
+}
+
+#[test]
+fn tokio_02_spawn_blocking_works() {
+    let ran = Arc::new(AtomicBool::new(false));
+    let ran2 = ran.clone();
+    runtime::run_std(async move {
+        println!("in future, before blocking");
+        tokio_02::task::spawn_blocking(move || {
+            println!("in blocking");
+            ran.store(true, Ordering::SeqCst);
+        }).await.expect("blocking task panicked!");
+        println!("blocking done");
+    });
+    assert!(ran2.load(Ordering::SeqCst));
+}
+
+#[test]
+fn tokio_02_block_in_place_works() {
+    let ran = Arc::new(AtomicBool::new(false));
+    let ran2 = ran.clone();
+    runtime::run_std(async move {
+        println!("in future, before blocking");
+        tokio_02::task::spawn(async move {
+            tokio_02::task::block_in_place(move || {
+                println!("in blocking");
+                ran.store(true, Ordering::SeqCst);
+            })
+        }).await.expect("blocking task panicked!");
+        println!("blocking done");
+    });
+    assert!(ran2.load(Ordering::SeqCst));
 }

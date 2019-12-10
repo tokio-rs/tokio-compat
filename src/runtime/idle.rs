@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
 };
 use tokio_02::sync::mpsc;
-
+pub(super) type Rx = mpsc::Receiver<()>;
 /// Tracks the number of tasks spawned on a runtime.
 ///
 /// This is required to implement `shutdown_on_idle` and `tokio::run` APIs that
@@ -22,7 +22,7 @@ pub(super) struct Idle {
 pub(super) struct Track(Idle);
 
 impl Idle {
-    pub(super) fn new() -> (Self, mpsc::Receiver<()>) {
+    pub(super) fn new() -> (Self, Rx) {
         let (tx, rx) = mpsc::channel(1);
         let this = Self {
             tx,

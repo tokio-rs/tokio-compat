@@ -1,20 +1,22 @@
-use futures_01::future::{self as future_01, Future as Future01};
+use super::Runtime;
+use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, FutureExt};
-use std::{future::Future, pin::Pin};
-use tokio_02::executor::{self as executor_02, current_thread::TaskExecutor as TaskExecutor02};
+use std::future::Future;
 use tokio_executor_01 as executor_01;
 
 /// Executes futures on the current thread.
 ///
 /// All futures executed using this executor will be executed on the current
 /// thread. As such, `run` will wait for these futures to complete before
-/// returning.
+/// returning, if they are spawned without a `JoinHandle`.
 ///
-/// For more details, see the [module level](../index.html) documentation.
-#[derive(Clone, Debug)]
+/// For more details, see the [module level](index.html) documentation.
+#[derive(Debug)]
 pub struct TaskExecutor {
-    inner: TaskExecutor02,
+    _p: (),
 }
+
+// ===== impl TaskExecutor =====
 
 impl TaskExecutor {
     /// Returns an executor that executes futures on the current thread.
@@ -24,9 +26,7 @@ impl TaskExecutor {
     ///
     /// For more details, see the [module level](index.html) documentation.
     pub fn current() -> TaskExecutor {
-        TaskExecutor {
-            inner: TaskExecutor02::current(),
-        }
+        TaskExecutor { _p: () }
     }
 
     /// Spawn a `futures` 0.1 future onto the current `CurrentThread` instance.
@@ -34,24 +34,65 @@ impl TaskExecutor {
         &mut self,
         future: impl Future01<Item = (), Error = ()> + 'static,
     ) -> Result<(), executor_01::SpawnError> {
-        let future = Box::pin(future.compat().map(|_| ()));
-        self.spawn_local_std(future).map_err(map_spawn_err)
+        self.spawn_local_std(future.compat().map(|_| ()))
     }
 
-    /// Spawn a `std::future` future onto the current `CurrentThread` instance.
+    /// Spawn a `std::futures` future onto the current `CurrentThread`
+    /// instance.
     pub fn spawn_local_std(
         &mut self,
-        future: Pin<Box<dyn Future<Output = ()>>>,
-    ) -> Result<(), executor_02::SpawnError> {
-        self.inner.spawn_local(future)
+        future: impl Future<Output = ()> + 'static,
+    ) -> Result<(), executor_01::SpawnError> {
+        if let Some(idle) = Runtime::reserve_idle() {
+            tokio_02::task::spawn_local(idle.with(future));
+            Ok(())
+        } else {
+            Err(executor_01::SpawnError::shutdown())
+        }
     }
-}
 
-fn map_spawn_err(new: executor_02::SpawnError) -> executor_01::SpawnError {
-    match new {
-        _ if new.is_shutdown() => executor_01::SpawnError::shutdown(),
-        _ if new.is_at_capacity() => executor_01::SpawnError::at_capacity(),
-        e => unreachable!("weird spawn error {:?}", e),
+    /// Spawn a `futures` 0.1 future onto the current `CurrentThread` instance,
+    /// returning a `JoinHandle` that can be used to await its result.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
+    /// with a `JoinHandle` for  awaiting their completion. See [here] for
+    /// details on shutting down the compatibility runtime.
+    ///
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    /// [here]: ../index.html#shutting-down
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is no current runtime, or if the current
+    /// runtime is not a current-thread runtime.
+    pub fn spawn_handle<T: 'static, E: 'static>(
+        &mut self,
+        future: impl Future01<Item = T, Error = E> + 'static,
+    ) -> tokio_02::task::JoinHandle<Result<T, E>> {
+        self.spawn_handle_std(future.compat())
+    }
+
+    /// Spawn a `std::future` future onto the current `CurrentThread` instance,
+    /// returning a `JoinHandle` that can be used to await its result.
+    ///
+    /// **Note** that futures spawned in this manner do not "count" towards
+    /// keeping the runtime active for [`shutdown_on_idle`], since they are paired
+    /// with a `JoinHandle` for  awaiting their completion. See [here] for
+    /// details on shutting down the compatibility runtime.
+    ///
+    /// [`shutdown_on_idle`]: struct.Runtime.html#method.shutdown_on_idle
+    /// [here]: ../index.html#shutting-down
+    ///
+    /// # Panics
+    ///
+    /// This function panics if there is no current runtime, or if the current
+    /// runtime is not a current-thread runtime.
+    pub fn spawn_handle_std<T: 'static>(
+        &mut self,
+        future: impl Future<Output = T> + 'static,
+    ) -> tokio_02::task::JoinHandle<T> {
+        tokio_02::task::spawn_local(future)
     }
 }
 
@@ -64,7 +105,11 @@ impl executor_01::Executor for TaskExecutor {
     }
 
     fn status(&self) -> Result<(), executor_01::SpawnError> {
-        executor_02::Executor::status(&self.inner).map_err(map_spawn_err)
+        if Runtime::is_current() {
+            Ok(())
+        } else {
+            Err(executor_01::SpawnError::shutdown())
+        }
     }
 }
 
@@ -73,63 +118,10 @@ where
     F: Future01<Item = (), Error = ()> + 'static,
 {
     fn spawn(&mut self, future: F) -> Result<(), executor_01::SpawnError> {
-        let future = Box::pin(future.compat().map(|_| ()));
-        self.spawn_local_std(future).map_err(map_spawn_err)
+        self.spawn_local(Box::new(future))
     }
 
     fn status(&self) -> Result<(), executor_01::SpawnError> {
-        executor_02::Executor::status(&self.inner).map_err(map_spawn_err)
-    }
-}
-
-impl executor_02::Executor for TaskExecutor {
-    fn spawn(
-        &mut self,
-        future: Pin<Box<dyn Future<Output = ()> + Send>>,
-    ) -> Result<(), executor_02::SpawnError> {
-        self.spawn_local_std(future)
-    }
-
-    fn status(&self) -> Result<(), executor_02::SpawnError> {
-        executor_02::Executor::status(&self.inner)
-    }
-}
-
-impl<F> executor_02::TypedExecutor<F> for TaskExecutor
-where
-    F: Future<Output = ()> + 'static,
-{
-    fn spawn(&mut self, future: F) -> Result<(), executor_02::SpawnError> {
-        self.spawn_local_std(Box::pin(future))
-    }
-
-    fn status(&self) -> Result<(), executor_02::SpawnError> {
-        executor_02::Executor::status(&self.inner)
-    }
-}
-
-impl<F> future_01::Executor<F> for TaskExecutor
-where
-    F: Future01<Item = (), Error = ()> + 'static,
-{
-    fn execute(&self, future: F) -> Result<(), future_01::ExecuteError<F>> {
-        match executor_02::Executor::status(&self.inner) {
-            Err(e) if e.is_shutdown() => Err(future_01::ExecuteError::new(
-                future_01::ExecuteErrorKind::Shutdown,
-                future,
-            )),
-            Err(e) if e.is_at_capacity() => Err(future_01::ExecuteError::new(
-                future_01::ExecuteErrorKind::NoCapacity,
-                future,
-            )),
-            Err(e) => panic!("unexpected spawn error {:?}", e),
-            Ok(_) => {
-                let mut this = self.clone();
-                this.spawn_local(future).unwrap_or_else(|e| {
-                    debug_assert!(false, "status succeeded, but spawn failed: {}", e)
-                });
-                Ok(())
-            }
-        }
+        executor_01::Executor::status(self)
     }
 }
