@@ -1,5 +1,4 @@
 use futures_01::{future::Future as Future01, sync::oneshot};
-
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
 use std::{cell::RefCell, io, thread};
 use tokio_02::runtime::Handle;

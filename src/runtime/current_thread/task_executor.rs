@@ -37,7 +37,7 @@ impl TaskExecutor {
         self.spawn_local_std(future.compat().map(|_| ()))
     }
 
-    /// Spawn a `std::futures`  future onto the current `CurrentThread`
+    /// Spawn a `std::futures` future onto the current `CurrentThread`
     /// instance.
     pub fn spawn_local_std(
         &mut self,
