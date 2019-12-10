@@ -22,6 +22,7 @@ use std::io;
 /// See [module level][mod] documentation for more details.
 ///
 /// [mod]: index.html
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 #[derive(Debug)]
 pub struct Runtime {
     /// The inner `tokio` 0.2 runtime.
@@ -43,6 +44,7 @@ pub struct Runtime {
 }
 
 /// Handle to spawn a future on the corresponding `CurrentThread` runtime instance
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 #[derive(Debug, Clone)]
 pub struct Handle {
     inner: Handle02,
@@ -180,6 +182,7 @@ impl Handle {
 
 /// Error returned by the `run` function.
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub struct RunError {
     inner: (),
 }

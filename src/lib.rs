@@ -70,8 +70,15 @@
     no_crate_inject,
     attr(deny(warnings, rust_2018_idioms), allow(dead_code, unused_variables))
 ))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(any(feature = "rt-current-thread", feature = "rt-full"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "rt-current-thread", feature = "rt-full")))
+)]
 pub mod runtime;
+
 #[cfg(feature = "rt-full")]
 pub use self::runtime::{run, run_std};
 pub mod prelude;

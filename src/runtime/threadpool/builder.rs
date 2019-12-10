@@ -44,6 +44,7 @@ use tokio_timer_02::clock as clock_02;
 /// }
 /// ```
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub struct Builder {
     inner: runtime::Builder,
     clock: clock_02::Clock,

@@ -13,6 +13,7 @@ use std::future::Future;
 ///
 /// For more details, see the [module level](index.html) documentation.
 #[derive(Debug, Clone)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub struct TaskExecutor {
     pub(super) inner: super::compat::CompatSpawner<Handle>,
 }

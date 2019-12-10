@@ -12,6 +12,7 @@ use tokio_executor_01 as executor_01;
 ///
 /// For more details, see the [module level](index.html) documentation.
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub struct TaskExecutor {
     _p: (),
 }

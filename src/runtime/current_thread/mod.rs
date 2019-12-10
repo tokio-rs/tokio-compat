@@ -93,6 +93,7 @@ use std::future::Future;
 /// This first creates a new [`Runtime`], and calls [`Runtime::block_on`] with the provided future,
 /// which blocks the current thread until the provided future completes. It then calls
 /// [`Runtime::run`] to wait for any other spawned futures to resolve.
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub fn block_on_all<F>(future: F) -> Result<F::Item, F::Error>
 where
     F: Future01 + 'static,
@@ -105,6 +106,7 @@ where
 /// This first creates a new [`Runtime`], and calls [`Runtime::block_on`] with the provided future,
 /// which blocks the current thread until the provided future completes. It then calls
 /// [`Runtime::run`] to wait for any other spawned futures to resolve.
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub fn block_on_all_std<F>(future: F) -> F::Output
 where
     F: Future + 'static,
@@ -120,6 +122,7 @@ where
 /// # Panics
 ///
 /// This function panics if called from the context of an executor.
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()> + 'static,
@@ -134,6 +137,7 @@ where
 /// # Panics
 ///
 /// This function panics if called from the context of an executor.
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub fn run_std<F>(future: F)
 where
     F: Future<Output = ()> + 'static,

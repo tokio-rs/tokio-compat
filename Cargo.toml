@@ -63,3 +63,7 @@ tokio-current-thread-01 = { package = "tokio-current-thread", version = "0.1", o
 
 [dev-dependencies]
 tokio-01 = { package = "tokio", version = "0.1" }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
