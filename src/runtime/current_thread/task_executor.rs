@@ -32,7 +32,7 @@ impl TaskExecutor {
     /// Spawn a `futures` 0.1 future onto the current `CurrentThread` instance.
     pub fn spawn_local(
         &mut self,
-        future: Box<dyn Future01<Item = (), Error = ()>>,
+        future: impl Future01<Item = (), Error = ()> + 'static,
     ) -> Result<(), executor_01::SpawnError> {
         self.spawn_local_std(future.compat().map(|_| ()))
     }
@@ -68,7 +68,7 @@ impl TaskExecutor {
     /// runtime is not a current-thread runtime.
     pub fn spawn_handle<T: 'static, E: 'static>(
         &mut self,
-        future: Box<dyn Future01<Item = T, Error = E>>,
+        future: impl Future01<Item = T, Error = E> + 'static,
     ) -> tokio_02::task::JoinHandle<Result<T, E>> {
         self.spawn_handle_std(future.compat())
     }
