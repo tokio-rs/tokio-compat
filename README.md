@@ -3,23 +3,26 @@
 Compatibility layers between `tokio` 0.2 and legacy versions.
 
 [![Crates.io][crates-badge]][crates-url]
+[![Documentation][docs-badge]][docs-url]
 [![MIT licensed][mit-badge]][mit-url]
-[![Build Status][azure-badge]][azure-url]
-[![Gitter chat][gitter-badge]][gitter-url]
-
-[crates-badge]: https://img.shields.io/crates/v/tokio-compat.svg
-[crates-url]: https://crates.io/crates/tokio-compat
-[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
-[mit-url]: LICENSE
-[azure-badge]: https://dev.azure.com/tokio-rs/Tokio/_apis/build/status/tokio-rs.tokio?branchName=master
-[azure-url]: https://dev.azure.com/tokio-rs/Tokio/_build/latest?definitionId=1&branchName=master
-[gitter-badge]: https://img.shields.io/gitter/room/tokio-rs/tokio.svg
-[gitter-url]: https://gitter.im/tokio-rs/tokio
+[![Build Status][actions-badge]][actions-url]
+[![Discord][discord-badge]][discord-url]
 
 [Website](https://tokio.rs) |
 [Guides](https://tokio.rs/docs/) |
-[API Docs](https://docs.rs/tokio-compat/0.1.0-alpha.1/tokio-compat) |
-[Chat](https://gitter.im/tokio-rs/tokio)
+[API Docs][docs-url] |
+[Chat][discord-url]
+
+[crates-badge]: https://img.shields.io/crates/v/tokio-compat.svg
+[crates-url]: https://crates.io/crates/tokio-compat
+[docs-url]: https://docs.rs/tokio-compat/0.1.0/tokio-compat
+[docs-badge]: https://docs.rs/tokio-compat/badge.svg
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: LICENSE
+[actions-badge]: https://github.com/tokio-rs/tokio-compat/workflows/CI/badge.svg
+[actions-url]: https://github.com/tokio-rs/tokio-compat/actions?query=workflow%3ACI
+[discord-badge]: https://img.shields.io/discord/500028886025895936?logo=discord&label=discord&logoColor=white
+[discord-url]: https://discord.gg/6yGkFeN
 
 ## Overview
 
