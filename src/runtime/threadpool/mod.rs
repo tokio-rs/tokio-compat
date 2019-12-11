@@ -555,7 +555,8 @@ impl Runtime {
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        if let Some(inner) = self.inner.take() {
+        println!("Runtime::drop");
+        if let Some(inner) = dbg!(self.inner.take()) {
             drop(inner);
         }
     }

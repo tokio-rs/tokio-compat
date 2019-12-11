@@ -72,6 +72,7 @@ impl Background {
         let thread = thread::spawn(move || {
             let mut rt = tokio_current_thread_01::CurrentThread::new_with_park(timer);
             let _ = rt.block_on(shutdown_rx);
+            println!("------ BACKGROUND THREAD FINISHED -------");
         });
         let thread = Some(thread);
 
@@ -94,8 +95,10 @@ impl Background {
 
 impl Drop for Background {
     fn drop(&mut self) {
-        let _ = self.shutdown_tx.take().unwrap().send(());
-        let _ = self.thread.take().unwrap().join();
+        println!("drop backgorund");
+        let _ = dbg!(self.shutdown_tx.take().unwrap().send(()));
+        let _ = dbg!(self.thread.take().unwrap().join());
+        println!("bg thread joined");
     }
 }
 
