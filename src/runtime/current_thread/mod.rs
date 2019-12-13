@@ -143,7 +143,6 @@ where
     F: Future<Output = ()> + 'static,
 {
     let mut r = Runtime::new().expect("failed to start runtime on current thread");
-    let v = r.block_on_std(future);
+    r.block_on_std(future);
     r.run().expect("failed to resolve remaining futures");
-    v
 }
