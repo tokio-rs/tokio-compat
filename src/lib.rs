@@ -59,6 +59,7 @@
 //! - `rt-current-thread`: enables the `current_thread` compatibilty runtime
 //! - `rt-full`: enables the `current_thread` and threadpool compatibility
 //!   runtimes (enabled by default)
+#![doc(html_root_url = "https://docs.rs/tokio-compat/0.1.0")]
 #![warn(
     missing_debug_implementations,
     missing_docs,
@@ -70,8 +71,15 @@
     no_crate_inject,
     attr(deny(warnings, rust_2018_idioms), allow(dead_code, unused_variables))
 ))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(any(feature = "rt-current-thread", feature = "rt-full"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "rt-current-thread", feature = "rt-full")))
+)]
 pub mod runtime;
+
 #[cfg(feature = "rt-full")]
 pub use self::runtime::{run, run_std};
 pub mod prelude;

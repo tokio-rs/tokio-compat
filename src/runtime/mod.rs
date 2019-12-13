@@ -230,6 +230,7 @@
 //! [`spawn_std`]: struct.Runtime.html#method.spawn_std
 //! [`block_on_std`]: struct.Runtime.html#method.spawn_std
 mod compat;
+#[cfg(feature = "rt-current-thread")]
 pub mod current_thread;
 mod idle;
 #[cfg(feature = "rt-full")]

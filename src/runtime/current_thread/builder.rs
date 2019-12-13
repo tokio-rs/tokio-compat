@@ -37,6 +37,7 @@ use tokio_timer_02::clock::Clock;
 /// # }
 /// ```
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub struct Builder {
     /// The clock to use
     clock: Clock,

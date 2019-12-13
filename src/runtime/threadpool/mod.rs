@@ -35,6 +35,7 @@ use tokio_timer_02 as timer_02;
 ///
 /// [rt]: https://docs.rs/tokio/0.2.4/tokio/runtime/struct.Runtime.html
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub struct Runtime {
     /// The actual runtime. This is in an option so that it can be dropped when
     /// shutting down.
@@ -46,9 +47,9 @@ pub struct Runtime {
 }
 
 pin_project_lite::pin_project! {
-
     /// A future that resolves when the Tokio `Runtime` is shut down.
     #[derive(Debug)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
     pub struct Shutdown {
         #[pin]
         inner: oneshot::Receiver<()>,
@@ -56,6 +57,7 @@ pin_project_lite::pin_project! {
 }
 
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 struct Inner {
     runtime: runtime::Runtime,
 
@@ -112,6 +114,7 @@ struct Inner {
 /// This function panics if called from the context of an executor.
 ///
 /// [mod]: ../index.html
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()> + Send + 'static,
@@ -165,6 +168,7 @@ where
 /// This function panics if called from the context of an executor.
 ///
 /// [mod]: ../index.html
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub fn run_std<F>(future: F)
 where
     F: Future<Output = ()> + Send + 'static,
