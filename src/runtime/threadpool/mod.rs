@@ -13,10 +13,9 @@ use super::{
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
-use std::{future::Future, io};
+use std::{fmt, future::Future, io};
 use tokio_02::{
     runtime::{self, Handle},
-    sync::oneshot,
     task::JoinHandle,
 };
 use tokio_executor_01 as executor_01;
@@ -46,14 +45,10 @@ pub struct Runtime {
     idle_rx: idle::Rx,
 }
 
-pin_project_lite::pin_project! {
-    /// A future that resolves when the Tokio `Runtime` is shut down.
-    #[derive(Debug)]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
-    pub struct Shutdown {
-        #[pin]
-        inner: oneshot::Receiver<()>,
-    }
+/// A future that resolves when the Tokio `Runtime` is shut down.
+#[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
+pub struct Shutdown {
+    inner: Box<dyn Future01<Item = (), Error = ()> + Send + Sync>,
 }
 
 #[derive(Debug)]
@@ -121,7 +116,7 @@ where
 {
     let runtime = Runtime::new().expect("failed to start new Runtime");
     runtime.spawn(future);
-    runtime.shutdown_on_idle();
+    runtime.shutdown_on_idle().wait().unwrap();
 }
 
 /// Start the Tokio runtime using the supplied `std::future` future to bootstrap
@@ -175,7 +170,7 @@ where
 {
     let mut runtime = Runtime::new().expect("failed to start new Runtime");
     runtime.block_on_std(future);
-    runtime.shutdown_on_idle();
+    runtime.shutdown_on_idle().wait().unwrap();
 }
 
 impl Runtime {
@@ -244,6 +239,7 @@ impl Runtime {
     ///
     /// ```
     /// use tokio_compat::runtime::Runtime;
+    /// use futures_01::future::Future;
     ///
     /// fn main() {
     ///    // Create the runtime
@@ -255,7 +251,9 @@ impl Runtime {
     ///        Ok(())
     ///    }));
     ///
-    ///     rt.shutdown_on_idle();
+    ///     rt.shutdown_on_idle()
+    ///         .wait()
+    ///         .unwrap();
     /// }
     /// ```
     ///
@@ -284,6 +282,7 @@ impl Runtime {
     ///
     /// ```
     /// use tokio_compat::runtime::Runtime;
+    /// use futures_01::future::Future;
     ///
     /// fn main() {
     ///    // Create the runtime
@@ -294,7 +293,9 @@ impl Runtime {
     ///        println!("now running on a worker thread");
     ///    });
     ///
-    ///     rt.shutdown_on_idle();
+    ///     rt.shutdown_on_idle()
+    ///         .wait()
+    ///         .unwrap();
     /// }
     /// ```
     ///
@@ -467,6 +468,7 @@ impl Runtime {
     ///
     /// ```
     /// use tokio_compat::runtime::Runtime;
+    /// use futures_01::future::Future;
     ///
     /// let rt = Runtime::new()
     ///     .unwrap();
@@ -475,7 +477,9 @@ impl Runtime {
     /// # rt.spawn_std(async {});
     ///
     /// // Shutdown the runtime
-    /// rt.shutdown_on_idle();
+    /// rt.shutdown_on_idle()
+    ///     .wait()
+    ///     .unwrap();
     /// ```
     ///
     /// [mod]: index.html
@@ -489,11 +493,10 @@ impl Runtime {
         let _timer = timer_02::timer::set_default(compat_bg.timer());
         let _reactor = reactor_01::set_default(compat_bg.reactor());
         let _executor = executor_01::set_default(spawner);
-        let idle = &mut self.idle_rx;
-        let (tx, rx) = oneshot::channel();
-        runtime.block_on(idle.recv());
-        tx.send(()).unwrap();
-        Shutdown { inner: rx }
+        runtime.block_on(self.idle_rx.recv());
+        let f = futures_01::future::lazy(move || Ok(()));
+
+        Shutdown { inner: Box::new(f) }
     }
 
     /// Signals the runtime to shutdown immediately.
@@ -518,6 +521,7 @@ impl Runtime {
     ///
     /// ```
     /// use tokio_compat::runtime::Runtime;
+    /// use futures_01::future::Future;
     ///
     /// let rt = Runtime::new()
     ///     .unwrap();
@@ -525,16 +529,17 @@ impl Runtime {
     /// // Use the runtime...
     ///
     /// // Shutdown the runtime
-    /// rt.shutdown_now();
+    /// rt.shutdown_now()
+    ///     .wait()
+    ///     .unwrap();
     /// ```
     ///
     /// [mod]: index.html
     pub fn shutdown_now(mut self) -> Shutdown {
-        let (tx, rx) = oneshot::channel();
-        tx.send(()).unwrap();
         drop(self.inner.take().unwrap());
+        let f = futures_01::future::lazy(move || Ok(()));
 
-        Shutdown { inner: rx }
+        Shutdown { inner: Box::new(f) }
     }
 
     fn spawner(&self) -> CompatSpawner<Handle> {
@@ -561,12 +566,16 @@ impl Drop for Runtime {
     }
 }
 
-impl std::future::Future for Shutdown {
-    type Output = ();
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        self.project().inner.poll(cx).map(|_| ())
+impl Future01 for Shutdown {
+    type Item = ();
+    type Error = ();
+    fn poll(&mut self) -> futures_01::Poll<Self::Item, Self::Error> {
+        self.inner.poll()
+    }
+}
+
+impl fmt::Debug for Shutdown {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.pad("Shutdown { .. }")
     }
 }
