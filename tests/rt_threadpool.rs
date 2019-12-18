@@ -124,7 +124,9 @@ fn tokio_02_spawn_blocking_works() {
         tokio_02::task::spawn_blocking(move || {
             println!("in blocking");
             ran.store(true, Ordering::SeqCst);
-        }).await.expect("blocking task panicked!");
+        })
+        .await
+        .expect("blocking task panicked!");
         println!("blocking done");
     });
     assert!(ran2.load(Ordering::SeqCst));
@@ -141,8 +143,26 @@ fn tokio_02_block_in_place_works() {
                 println!("in blocking");
                 ran.store(true, Ordering::SeqCst);
             })
-        }).await.expect("blocking task panicked!");
+        })
+        .await
+        .expect("blocking task panicked!");
         println!("blocking done");
     });
     assert!(ran2.load(Ordering::SeqCst));
+}
+
+#[test]
+fn block_on_twice() {
+    // Repro for tokio-rs/tokio-compat#10.
+    let mut rt = runtime::Runtime::new().unwrap();
+    rt.block_on_std(async {
+        tokio_02::spawn(async {}).await;
+        println!("spawn 1 done")
+    });
+    println!("block_on 1 done");
+    rt.block_on_std(async {
+        tokio_02::spawn(async {}).await;
+        println!("spawn 2 done");
+    });
+    println!("done");
 }
