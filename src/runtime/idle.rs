@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
 };
 use tokio_02::sync::mpsc;
-pub(super) type Rx = mpsc::Receiver<()>;
+pub(super) type Rx = mpsc::UnboundedReceiver<()>;
 /// Tracks the number of tasks spawned on a runtime.
 ///
 /// This is required to implement `shutdown_on_idle` and `tokio::run` APIs that
@@ -12,7 +12,7 @@ pub(super) type Rx = mpsc::Receiver<()>;
 /// `shutdown_on_idle` API.
 #[derive(Clone, Debug)]
 pub(super) struct Idle {
-    tx: mpsc::Sender<()>,
+    tx: mpsc::UnboundedSender<()>,
     spawned: Arc<AtomicUsize>,
 }
 
@@ -23,7 +23,7 @@ pub(super) struct Track(Idle);
 
 impl Idle {
     pub(super) fn new() -> (Self, Rx) {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::unbounded_channel();
         let this = Self {
             tx,
             spawned: Arc::new(AtomicUsize::new(0)),
@@ -42,12 +42,12 @@ impl Track {
     /// Run a task, decrementing the spawn count when it completes.
     ///
     /// If the spawned count is now 0, this sends a notification on the idle channel.
-    pub(super) async fn with<T>(mut self, f: impl Future<Output = T>) -> T {
+    pub(super) async fn with<T>(self, f: impl Future<Output = T>) -> T {
         let result = f.await;
         let spawned = self.0.spawned.fetch_sub(1, Ordering::Release);
         if spawned == 1 {
             fence(Ordering::Acquire);
-            let _ = self.0.tx.send(()).await;
+            let _ = self.0.tx.send(());
         }
         result
     }
