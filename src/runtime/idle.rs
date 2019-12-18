@@ -49,20 +49,6 @@ impl Idle {
 }
 
 impl Rx {
-    // pub(super) async fn drain(&mut self) {
-    //     struct Drain<'a>(&'a mut mpsc::UnboundedReceiver<()>);
-    //     impl<'a> Future for Drain<'a> {
-    //         type Output = ();
-
-    //         fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    //             let rx = &mut self.as_mut().0;
-    //             while let Poll::Ready(Some(_)) = rx.poll_recv(cx) {}
-    //             Poll::Ready(())
-    //         }
-    //     }
-    //     Drain(&mut self.0).await
-    // }
-
     pub(super) async fn idle(&mut self) {
         while self.spawned.load(Ordering::Acquire) != 0 {
             // Wait to be woken up again.
