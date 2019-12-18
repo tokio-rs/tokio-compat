@@ -370,7 +370,7 @@ impl Runtime {
         let _timer = timer_02::timer::set_default(compat.timer());
 
         executor_01::with_default(&mut spawner, &mut enter, |_enter| {
-            Self::with_idle(idle, move || local.block_on(inner, idle_rx.recv()))
+            Self::with_idle(idle, move || local.block_on(inner, idle_rx.idle()))
         });
         Ok(())
     }

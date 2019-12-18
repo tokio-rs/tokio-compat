@@ -493,7 +493,7 @@ impl Runtime {
         let _timer = timer_02::timer::set_default(compat_bg.timer());
         let _reactor = reactor_01::set_default(compat_bg.reactor());
         let _executor = executor_01::set_default(spawner);
-        runtime.block_on(self.idle_rx.recv());
+        runtime.block_on(self.idle_rx.idle());
         let f = futures_01::future::lazy(move || Ok(()));
 
         Shutdown { inner: Box::new(f) }
