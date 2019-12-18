@@ -156,12 +156,12 @@ fn block_on_twice() {
     // Repro for tokio-rs/tokio-compat#10.
     let mut rt = runtime::Runtime::new().unwrap();
     rt.block_on_std(async {
-        tokio_02::spawn(async {}).await;
+        tokio_02::spawn(async {}).await.unwrap();
         println!("spawn 1 done")
     });
     println!("block_on 1 done");
     rt.block_on_std(async {
-        tokio_02::spawn(async {}).await;
+        tokio_02::spawn(async {}).await.unwrap();
         println!("spawn 2 done");
     });
     println!("done");
