@@ -148,3 +148,19 @@ fn block_on_twice() {
     });
     println!("done");
 }
+
+#[test]
+fn idle_after_block_on() {
+    let mut rt = current_thread::Runtime::new().unwrap();
+    let ran = Arc::new(AtomicBool::new(false));
+    rt.block_on_std(async {
+        tokio_02::spawn(async {}).await;
+    });
+    let ran2 = ran.clone();
+    rt.spawn_std(async move {
+        tokio_02::task::yield_now().await;
+        ran2.store(true, Ordering::SeqCst);
+    });
+    rt.run().unwrap();
+    assert!(ran.load(Ordering::SeqCst));
+}

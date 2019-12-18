@@ -4,7 +4,13 @@ use std::sync::{
     Arc,
 };
 use tokio_02::sync::mpsc;
-pub(super) type Rx = mpsc::UnboundedReceiver<()>;
+
+#[derive(Debug)]
+pub(super) struct Rx {
+    rx: mpsc::UnboundedReceiver<()>,
+    spawned: Arc<AtomicUsize>,
+}
+
 /// Tracks the number of tasks spawned on a runtime.
 ///
 /// This is required to implement `shutdown_on_idle` and `tokio::run` APIs that
@@ -28,6 +34,10 @@ impl Idle {
             tx,
             spawned: Arc::new(AtomicUsize::new(0)),
         };
+        let rx = Rx {
+            rx,
+            spawned: this.spawned.clone(),
+        };
         (this, rx)
     }
 
@@ -35,6 +45,15 @@ impl Idle {
     pub(super) fn reserve(&self) -> Track {
         self.spawned.fetch_add(1, Ordering::Relaxed);
         Track(self.clone())
+    }
+}
+
+impl Rx {
+    pub(super) async fn idle(&mut self) {
+        while self.spawned.load(Ordering::Acquire) != 0 {
+            // Wait to be woken up again.
+            let _ = self.rx.recv().await;
+        }
     }
 }
 
