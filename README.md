@@ -15,7 +15,7 @@ Compatibility layers between `tokio` 0.2 and legacy versions.
 
 [crates-badge]: https://img.shields.io/crates/v/tokio-compat.svg
 [crates-url]: https://crates.io/crates/tokio-compat
-[docs-url]: https://docs.rs/tokio-compat/0.1.1/tokio-compat
+[docs-url]: https://docs.rs/tokio-compat/0.1.2/tokio-compat
 [docs-badge]: https://docs.rs/tokio-compat/badge.svg
 [mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
 [mit-url]: LICENSE

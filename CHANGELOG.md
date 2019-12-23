@@ -1,3 +1,10 @@
+# 0.1.2 (December 18, 2019)
+
+### Fixed
+
+- Dependencies on `futures-core-preview` and `futures-util-preview` updated to
+  release `futures` 0.3 versions (#14)
+
 # 0.1.1 (December 18, 2019)
 
 ### Fixed
