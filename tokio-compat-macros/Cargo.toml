@@ -1,0 +1,24 @@
+[package]
+name = "tokio-compat-macros"
+version = "0.1.2"
+edition = "2018"
+authors = ["Tokio Contributors <team@tokio.rs>"]
+license = "MIT"
+readme = "README.md"
+documentation = "https://docs.rs/tokio-compat/0.1.2/tokio-compat/"
+repository = "https://github.com/tokio-rs/tokio-compat"
+homepage = "https://tokio.rs"
+description = """
+Compatibility between `tokio` 0.2 and legacy versions.
+"""
+categories = ["asynchronous", "network-programming"]
+keywords = ["io", "async", "non-blocking", "futures", "tokio"]
+
+[lib]
+proc-macro = true
+
+[features]
+
+[dependencies]
+quote = "1"
+syn = { version = "1.0.3", features = ["full"] }
