@@ -112,7 +112,7 @@ struct Inner {
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub fn run<F>(future: F)
 where
-    F: Future01<Item = (), Error = ()>,
+    F: Future01<Item = (), Error = ()> + Send + 'static,
 {
     run_std(future.compat().map(|_| ()))
 }
@@ -164,10 +164,10 @@ where
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
 pub fn run_std<F>(future: F)
 where
-    F: Future<Output = ()>,
+    F: Future<Output = ()> + Send + 'static,
 {
     let mut runtime = Runtime::new().expect("failed to start new Runtime");
-    runtime.block_on_std(future);
+    runtime.spawn_std(future);
     runtime.shutdown_on_idle().wait().unwrap();
 }
 
