@@ -307,7 +307,7 @@ impl Runtime {
     /// complete execution by calling `block_on` or `run`.
     pub fn block_on<F>(&mut self, f: F) -> Result<F::Item, F::Error>
     where
-        F: Future01 + 'static,
+        F: Future01,
     {
         self.block_on_std(f.compat())
     }
@@ -330,7 +330,7 @@ impl Runtime {
     /// complete execution by calling `block_on` or `run`.
     pub fn block_on_std<F>(&mut self, f: F) -> F::Output
     where
-        F: Future + 'static,
+        F: Future,
     {
         let handle = self.inner.handle().clone();
         let Runtime {

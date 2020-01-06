@@ -96,7 +96,7 @@ use std::future::Future;
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub fn block_on_all<F>(future: F) -> Result<F::Item, F::Error>
 where
-    F: Future01 + 'static,
+    F: Future01,
 {
     block_on_all_std(future.compat())
 }
@@ -109,7 +109,7 @@ where
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
 pub fn block_on_all_std<F>(future: F) -> F::Output
 where
-    F: Future + 'static,
+    F: Future,
 {
     let mut r = Runtime::new().expect("failed to start runtime on current thread");
     let v = r.block_on_std(future);
