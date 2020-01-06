@@ -114,9 +114,7 @@ pub fn run<F>(future: F)
 where
     F: Future01<Item = (), Error = ()>,
 {
-    let runtime = Runtime::new().expect("failed to start new Runtime");
-    runtime.spawn(future);
-    runtime.shutdown_on_idle().wait().unwrap();
+    run_std(future.compat().map(|_| ()))
 }
 
 /// Start the Tokio runtime using the supplied `std::future` future to bootstrap
