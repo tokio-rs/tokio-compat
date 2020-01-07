@@ -2,7 +2,7 @@ use tokio_02::runtime::Handle;
 use tokio_02::task::JoinHandle;
 use tokio_executor_01::{self as executor_01, Executor as Executor01};
 
-use futures_01::future::Future as Future01;
+use futures_01::future::{self as future_01, Future as Future01};
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
 use std::future::Future;
 
@@ -174,6 +174,16 @@ impl TaskExecutor {
         F::Output: Send + 'static,
     {
         self.inner.inner.spawn(future)
+    }
+}
+
+impl<T> future_01::Executor<T> for TaskExecutor
+where
+    T: Future01<Item = (), Error = ()> + Send + 'static,
+{
+    fn execute(&self, future: T) -> Result<(), future_01::ExecuteError<T>> {
+        self.spawn(future);
+        Ok(())
     }
 }
 

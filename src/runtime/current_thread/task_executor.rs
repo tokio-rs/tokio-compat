@@ -1,5 +1,5 @@
 use super::Runtime;
-use futures_01::future::Future as Future01;
+use futures_01::future::{self as future_01, Future as Future01};
 use futures_util::{compat::Future01CompatExt, FutureExt};
 use std::future::Future;
 use tokio_executor_01 as executor_01;
@@ -94,6 +94,23 @@ impl TaskExecutor {
         future: impl Future<Output = T> + 'static,
     ) -> tokio_02::task::JoinHandle<T> {
         tokio_02::task::spawn_local(future)
+    }
+}
+
+impl<T> future_01::Executor<T> for TaskExecutor
+where
+    T: Future01<Item = (), Error = ()> + 'static,
+{
+    fn execute(&self, future: T) -> Result<(), future_01::ExecuteError<T>> {
+        if let Some(idle) = Runtime::reserve_idle() {
+            tokio_02::task::spawn_local(idle.with(future.compat()));
+            Ok(())
+        } else {
+            Err(future_01::ExecuteError::new(
+                future_01::ExecuteErrorKind::Shutdown,
+                future,
+            ))
+        }
     }
 }
 
