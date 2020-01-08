@@ -88,6 +88,9 @@ impl Builder {
     /// # }
     /// ```
     pub fn core_threads(&mut self, val: usize) -> &mut Self {
+        // the deprecation warning states that this method will be replaced, but
+        // the method that will replace it doesn't exist yet...
+        #[allow(deprecated)]
         self.inner.num_threads(val);
         self
     }
