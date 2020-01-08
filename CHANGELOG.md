@@ -1,3 +1,15 @@
+# 0.1.3 (January 7, 2019)
+
+### Fixed
+
+- Removed unnecessary `'static` bounds on the `current_thread` runtime's
+  `block_on`/`block_on_std` functions that broke API compatibility with Tokio
+  0.1 (#17)
+
+### Added
+
+- Implementation of `futures` 0.1 `Executor` trait for `TaskExecutor`s (#18)
+
 # 0.1.2 (December 18, 2019)
 
 ### Fixed

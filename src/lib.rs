@@ -59,7 +59,7 @@
 //! - `rt-current-thread`: enables the `current_thread` compatibilty runtime
 //! - `rt-full`: enables the `current_thread` and threadpool compatibility
 //!   runtimes (enabled by default)
-#![doc(html_root_url = "https://docs.rs/tokio-compat/0.1.2")]
+#![doc(html_root_url = "https://docs.rs/tokio-compat/0.1.3")]
 #![warn(
     missing_debug_implementations,
     missing_docs,
