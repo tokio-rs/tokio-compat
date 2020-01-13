@@ -182,3 +182,29 @@ fn idle_after_block_on() {
     rt.shutdown_on_idle();
     assert!(ran.load(Ordering::SeqCst));
 }
+
+#[test]
+fn enter_exposed() {
+    let rt = runtime::Runtime::new().unwrap();
+    rt.enter(|| {
+        let _handle = tokio_02::runtime::Handle::current();
+    });
+}
+
+#[test]
+fn enter_can_spawn_01_futures() {
+    use futures_01::future::IntoFuture;
+    let future_ran = Arc::new(AtomicBool::new(false));
+    let ran = future_ran.clone();
+    let rt = runtime::Runtime::new().unwrap();
+    rt.enter(|| {
+        let future = tokio_01::spawn(futures_01::future::lazy(move || {
+            future_ran.store(true, Ordering::SeqCst);
+            Ok(())
+        }))
+        .into_future()
+        .compat();
+        futures_03::executor::block_on(future)
+    }).unwrap();
+    assert!(ran.load(Ordering::SeqCst));
+}
