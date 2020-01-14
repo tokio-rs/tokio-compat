@@ -178,15 +178,14 @@ fn enter_can_spawn_01_futures() {
     use futures_01::future::IntoFuture;
     let future_ran = Arc::new(AtomicBool::new(false));
     let ran = future_ran.clone();
-    let rt = current_thread::Runtime::new().unwrap();
+    let mut rt = current_thread::Runtime::new().unwrap();
     rt.enter(|| {
-        let future = tokio_01::spawn(futures_01::future::lazy(move || {
+        tokio_01::spawn(futures_01::future::lazy(move || {
             future_ran.store(true, Ordering::SeqCst);
             Ok(())
-        }))
-        .into_future()
-        .compat();
-        futures_03::executor::block_on(future)
-    }).unwrap();
+        }));
+    });
+
+    rt.run();
     assert!(ran.load(Ordering::SeqCst));
 }

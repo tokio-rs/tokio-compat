@@ -427,6 +427,8 @@ impl Runtime {
         // Set the default tokio 0.1 reactor to the background compat reactor.
         let _reactor = reactor_01::set_default(compat.reactor());
         let _timer = timer_02::timer::set_default(compat.timer());
-        executor_01::with_default(&mut spawner, &mut enter, |_enter| inner.enter(f))
+        executor_01::with_default(&mut spawner, &mut enter, |_enter| {
+            Self::with_idle(idle, || inner.enter(f))
+        })
     }
 }
