@@ -175,7 +175,6 @@ fn enter_exposed() {
 
 #[test]
 fn enter_can_spawn_01_futures() {
-    use futures_01::future::IntoFuture;
     let future_ran = Arc::new(AtomicBool::new(false));
     let ran = future_ran.clone();
     let mut rt = current_thread::Runtime::new().unwrap();
