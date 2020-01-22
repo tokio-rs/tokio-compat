@@ -554,6 +554,20 @@ impl Runtime {
     fn inner_mut(&mut self) -> &mut Inner {
         self.inner.as_mut().unwrap()
     }
+
+    /// Enter the runtime context
+    pub fn enter<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let spawner = self.spawner();
+        let inner = self.inner();
+        let compat = &inner.compat_bg;
+        let _timer = timer_02::timer::set_default(compat.timer());
+        let _reactor = reactor_01::set_default(compat.reactor());
+        let _executor = executor_01::set_default(spawner);
+        inner.runtime.enter(f)
+    }
 }
 
 impl Drop for Runtime {

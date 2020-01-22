@@ -409,4 +409,26 @@ impl Runtime {
             .try_with(|c| c.borrow().is_some())
             .unwrap_or(false)
     }
+
+    /// Enter the runtime context
+    pub fn enter<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce() -> R,
+    {
+        let handle = self.inner.handle().clone();
+        let Runtime {
+            ref inner,
+            ref compat,
+            ref idle,
+            ..
+        } = *self;
+        let mut spawner = compat::CompatSpawner::new(handle, &idle);
+        let mut enter = executor_01::enter().unwrap();
+        // Set the default tokio 0.1 reactor to the background compat reactor.
+        let _reactor = reactor_01::set_default(compat.reactor());
+        let _timer = timer_02::timer::set_default(compat.timer());
+        executor_01::with_default(&mut spawner, &mut enter, |_enter| {
+            Self::with_idle(idle, || inner.enter(f))
+        })
+    }
 }
