@@ -175,8 +175,9 @@ impl Builder {
         // Tokio 0.2's threaded_scheduler will spawn threads that each contain an arced
         // ref to the `on_thread_start` fn. If the runtime shuts down but there is still
         // access to a runtime handle, the mio driver will not shutdown. To avoid this we
-        // only want the `on_thread_start` to hold a weak ref and attempt to check async if
-        // the runtime has been shutdown by upgrading the weak pointer.
+        // only want the `on_thread_start` to hold a weak ref and attempt to upgrade, since
+        // the runtime will still be acitve the upgrade should work. Otherwise, somehow
+        // tokio started a new thread after its runtime has been dropped.
         let compat_sender2 = Arc::downgrade(&compat_sender);
         let mut lock = compat_sender.write().unwrap();
 
@@ -191,14 +192,14 @@ impl Builder {
                 // handle is no longer available.
                 //
                 // This upgrade will only fail if the compat runtime has been dropped.
-                let sender = compat_sender2.upgrade().expect("Compat runtime shutdown.");
+                let sender = compat_sender2
+                    .upgrade()
+                    .expect("Runtime dropped but thread started; this is a bug!");
                 let lock = sender.read().unwrap();
                 let compat_sender = lock
                     .as_ref()
                     .expect("compat executor needs to be set before the pool is run!")
                     .clone();
-                drop(lock);
-                drop(sender);
                 compat::set_guards(compat_sender, &compat_timer, &compat_reactor);
             })
             .on_thread_stop(|| {
