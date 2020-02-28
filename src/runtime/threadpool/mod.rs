@@ -13,7 +13,12 @@ use super::{
 
 use futures_01::future::Future as Future01;
 use futures_util::{compat::Future01CompatExt, future::FutureExt};
-use std::{fmt, future::Future, io};
+use std::{
+    fmt,
+    future::Future,
+    io,
+    sync::{Arc, RwLock},
+};
 use tokio_02::{
     runtime::{self, Handle},
     task::JoinHandle,
@@ -43,6 +48,10 @@ pub struct Runtime {
     /// Idleness tracking.
     idle: idle::Idle,
     idle_rx: idle::Rx,
+
+    // This should store the only long-living strong ref to the handle,
+    // and once the Runtime is dropped, it should also be deallocated.
+    compat_sender: Arc<RwLock<Option<CompatSpawner<tokio_02::runtime::Handle>>>>,
 }
 
 /// A future that resolves when the Tokio `Runtime` is shut down.
