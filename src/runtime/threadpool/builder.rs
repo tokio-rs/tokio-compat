@@ -174,7 +174,7 @@ impl Builder {
         //
         // Tokio 0.2's threaded_scheduler will spawn threads that each contain an arced
         // ref to the `on_thread_start` fn. If the runtime shuts down but there is still
-        // access to a runtime handle the mio driver will not shutdown. To avoid this we
+        // access to a runtime handle, the mio driver will not shutdown. To avoid this we
         // only want the `on_thread_start` to hold a weak ref and attempt to check async if
         // the runtime has been shutdown by upgrading the weak pointer.
         let compat_sender2 = Arc::downgrade(&compat_sender);
