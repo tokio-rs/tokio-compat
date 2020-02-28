@@ -49,8 +49,8 @@ pub struct Runtime {
     idle: idle::Idle,
     idle_rx: idle::Rx,
 
-    // This should store the only long living strong ref to the handle
-    // and once Runtime is dropped it should also deallocate.
+    // This should store the only long-living strong ref to the handle,
+    // and once the Runtime is dropped, it should also be deallocated.
     compat_sender: Arc<RwLock<Option<CompatSpawner<tokio_02::runtime::Handle>>>>,
 }
 
