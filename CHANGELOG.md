@@ -1,10 +1,16 @@
-# 0.1.4 (January 8, 2019)
+# 0.1.5 (March 3, 2020)
+
+### Fixed
+
+- FD leak caused by leaky strong Arc reference (#28)
+
+# 0.1.4 (January 8, 2020)
 
 ### Fixed
 
 - Compiler warnings in the threadpool runtime (#21)
 
-# 0.1.3 (January 7, 2019)
+# 0.1.3 (January 7, 2020)
 
 ### Fixed
 
