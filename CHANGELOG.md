@@ -1,3 +1,9 @@
+# 0.1.6 (April 21, 2020)
+
+### Changed
+
+- Make documentation for the `prelude` module properly link to reexports (#31)
+
 # 0.1.5 (March 3, 2020)
 
 ### Fixed
