@@ -64,3 +64,18 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features
       
+  fmt:
+    needs: [check]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v1
+      - name: rust-toolchain
+        uses: actions-rs/toolchain@v1.0.3
+        with:
+          toolchain: stable
+      - uses: actions-rs/cargo@v1.0.1
+        with:
+          command: fmt
+          args: --all -- --check
