@@ -27,14 +27,12 @@ use tokio_timer_02::clock::Clock;
 /// use tokio_compat::runtime::current_thread::Builder;
 /// use tokio_timer_02::clock::Clock;
 ///
-/// # pub fn main() {
 /// // build Runtime
 /// let runtime = Builder::new()
 ///     .clock(Clock::new())
 ///     .build();
 /// // ... call runtime.run(...)
 /// # let _ = runtime;
-/// # }
 /// ```
 #[derive(Debug)]
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-current-thread")))]
