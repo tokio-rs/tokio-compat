@@ -2,6 +2,10 @@ name: CI
 
 on: [push, pull_request]
 
+env:
+  RUSTFLAGS: -Dwarnings
+  RUST_BACKTRACE: 1
+
 jobs:
   check:
 

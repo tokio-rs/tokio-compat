@@ -172,7 +172,7 @@ fn idle_after_block_on() {
     let mut rt = runtime::Runtime::new().unwrap();
     let ran = Arc::new(AtomicBool::new(false));
     rt.block_on_std(async {
-        tokio_02::spawn(async {}).await;
+        tokio_02::spawn(async {}).await.unwrap();
     });
     let ran2 = ran.clone();
     rt.spawn_std(async move {
@@ -195,7 +195,7 @@ fn enter_exposed() {
 fn enter_can_spawn_01_futures() {
     let future_ran = Arc::new(AtomicBool::new(false));
     let ran = future_ran.clone();
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Runtime::new().unwrap();
     rt.enter(|| {
         tokio_01::spawn(futures_01::future::lazy(move || {
             future_ran.store(true, Ordering::SeqCst);

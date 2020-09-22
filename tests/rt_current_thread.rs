@@ -154,7 +154,7 @@ fn idle_after_block_on() {
     let mut rt = current_thread::Runtime::new().unwrap();
     let ran = Arc::new(AtomicBool::new(false));
     rt.block_on_std(async {
-        tokio_02::spawn(async {}).await;
+        tokio_02::spawn(async {}).await.unwrap();
     });
     let ran2 = ran.clone();
     rt.spawn_std(async move {
@@ -185,6 +185,6 @@ fn enter_can_spawn_01_futures() {
         }));
     });
 
-    rt.run();
+    rt.run().unwrap();
     assert!(ran.load(Ordering::SeqCst));
 }

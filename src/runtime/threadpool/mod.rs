@@ -110,7 +110,6 @@ struct Inner {
 ///
 /// tokio_compat::run(server);
 /// # }
-/// # pub fn main() {}
 /// ```
 ///
 /// # Panics
@@ -162,7 +161,6 @@ where
 ///
 /// tokio_compat::run(server);
 /// # }
-/// # pub fn main() {}
 /// ```
 ///
 /// # Panics
@@ -248,20 +246,18 @@ impl Runtime {
     /// use tokio_compat::runtime::Runtime;
     /// use futures_01::future::Future;
     ///
-    /// fn main() {
-    ///    // Create the runtime
-    ///    let rt = Runtime::new().unwrap();
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
     ///
-    ///    // Spawn a future onto the runtime
-    ///    rt.spawn(futures_01::future::lazy(|| {
-    ///        println!("now running on a worker thread");
-    ///        Ok(())
-    ///    }));
+    /// // Spawn a future onto the runtime
+    /// rt.spawn(futures_01::future::lazy(|| {
+    ///     println!("now running on a worker thread");
+    ///     Ok(())
+    /// }));
     ///
-    ///     rt.shutdown_on_idle()
-    ///         .wait()
-    ///         .unwrap();
-    /// }
+    /// rt.shutdown_on_idle()
+    ///     .wait()
+    ///     .unwrap();
     /// ```
     ///
     /// # Panics
@@ -291,19 +287,17 @@ impl Runtime {
     /// use tokio_compat::runtime::Runtime;
     /// use futures_01::future::Future;
     ///
-    /// fn main() {
-    ///    // Create the runtime
-    ///    let rt = Runtime::new().unwrap();
+    /// // Create the runtime
+    /// let rt = Runtime::new().unwrap();
     ///
-    ///    // Spawn a future onto the runtime
-    ///    rt.spawn_std(async {
-    ///        println!("now running on a worker thread");
-    ///    });
+    /// // Spawn a future onto the runtime
+    /// rt.spawn_std(async {
+    ///     println!("now running on a worker thread");
+    /// });
     ///
-    ///     rt.shutdown_on_idle()
-    ///         .wait()
-    ///         .unwrap();
-    /// }
+    /// rt.shutdown_on_idle()
+    ///     .wait()
+    ///     .unwrap();
     /// ```
     ///
     /// # Panics

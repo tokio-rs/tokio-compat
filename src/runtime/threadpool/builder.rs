@@ -30,18 +30,16 @@ use tokio_timer_02::clock as clock_02;
 /// use tokio_compat::runtime::Builder;
 /// use tokio_timer_02::clock::Clock;
 ///
-/// fn main() {
-///     // build Runtime
-///     let runtime = Builder::new()
-///         .clock(Clock::system())
-///         .core_threads(4)
-///         .name_prefix("my-custom-name-")
-///         .stack_size(3 * 1024 * 1024)
-///         .build()
-///         .unwrap();
+/// // build Runtime
+/// let runtime = Builder::new()
+///     .clock(Clock::system())
+///     .core_threads(4)
+///     .name_prefix("my-custom-name-")
+///     .stack_size(3 * 1024 * 1024)
+///     .build()
+///     .unwrap();
 ///
-///     // use runtime ...
-/// }
+/// // use runtime ...
 /// ```
 #[derive(Debug)]
 #[cfg_attr(docsrs, doc(cfg(feature = "rt-full")))]
@@ -80,12 +78,10 @@ impl Builder {
     /// ```
     /// # use tokio_compat::runtime;
     ///
-    /// # pub fn main() {
     /// let rt = runtime::Builder::new()
     ///     .core_threads(4)
     ///     .build()
     ///     .unwrap();
-    /// # }
     /// ```
     pub fn core_threads(&mut self, val: usize) -> &mut Self {
         // the deprecation warning states that this method will be replaced, but
@@ -108,11 +104,9 @@ impl Builder {
     /// ```
     /// # use tokio_compat::runtime;
     ///
-    /// # pub fn main() {
     /// let rt = runtime::Builder::new()
     ///     .name_prefix("my-pool-")
     ///     .build();
-    /// # }
     /// ```
     pub fn name_prefix<S: Into<String>>(&mut self, val: S) -> &mut Self {
         self.inner.thread_name(val);
@@ -132,11 +126,9 @@ impl Builder {
     /// ```
     /// # use tokio_compat::runtime;
     ///
-    /// # pub fn main() {
     /// let rt = runtime::Builder::new()
     ///     .stack_size(32 * 1024)
     ///     .build();
-    /// # }
     /// ```
     pub fn stack_size(&mut self, val: usize) -> &mut Self {
         self.inner.thread_stack_size(val);
@@ -151,11 +143,9 @@ impl Builder {
     ///
     /// ```
     /// # use tokio_compat::runtime::Builder;
-    /// # pub fn main() {
     /// let runtime = Builder::new().build().unwrap();
     /// // ... call runtime.run(...)
     /// # let _ = runtime;
-    /// # }
     /// ```
     pub fn build(&mut self) -> io::Result<Runtime> {
         let compat_bg = compat::Background::spawn(&self.clock)?;
